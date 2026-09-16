@@ -10,6 +10,8 @@ vi.mock('../flows/device-link.js',()=>({
   acceptDeviceLink:vi.fn()
 }));
 
+(globalThis as typeof globalThis&{IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
+
 const inspection={
   deviceLinkId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   familyId:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
