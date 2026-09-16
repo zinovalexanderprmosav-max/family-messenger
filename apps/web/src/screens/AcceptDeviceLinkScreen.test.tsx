@@ -2,7 +2,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach,describe,expect,it,vi } from 'vitest';
-import { inspectDeviceLinkToken } from '../flows/device-link.js';
+import { acceptDeviceLink,inspectDeviceLinkToken } from '../flows/device-link.js';
 import { AcceptDeviceLinkForm,AcceptDeviceLinkScreen } from './AcceptDeviceLinkScreen.js';
 
 vi.mock('../flows/device-link.js',()=>({
@@ -20,6 +20,12 @@ const inspection={
   memberDisplayName:'Александр',
   expiresAt:'2026-09-16T15:00:00.000Z'
 };
+
+function setInput(input:HTMLInputElement,value:string){
+  const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;
+  setter?.call(input,value);
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+}
 
 afterEach(()=>vi.clearAllMocks());
 
@@ -49,6 +55,38 @@ describe('AcceptDeviceLinkScreen',()=>{
       expect(container.textContent).toContain('Подключение устройства');
       expect(container.textContent).toContain('Александр');
       expect(container.textContent).toContain('Наша семья');
+    }finally{
+      await act(async()=>root.unmount());
+      container.remove();
+    }
+  });
+
+  it('enrolls the scanned device under the inspected existing member and finishes in pending approval',async()=>{
+    vi.mocked(inspectDeviceLinkToken).mockResolvedValue(inspection);
+    vi.mocked(acceptDeviceLink).mockResolvedValue({familyId:inspection.familyId,memberId:inspection.memberId,deviceId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',familyChatId:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',status:'pending_key',csrfToken:'csrf'});
+    const onDone=vi.fn();
+    const container=document.createElement('div');
+    document.body.appendChild(container);
+    const root=createRoot(container);
+    try{
+      await act(async()=>{root.render(<AcceptDeviceLinkScreen token="one-time-token" onDone={onDone}/>);});
+      await act(async()=>{await Promise.resolve();});
+      const inputs=Array.from(container.querySelectorAll('input'));
+      const deviceName=inputs.find(input=>input.getAttribute('placeholder')==='Например, Рабочий ПК') as HTMLInputElement;
+      const pin=inputs.find(input=>input.getAttribute('type')==='password') as HTMLInputElement;
+      expect(deviceName).toBeTruthy();
+      expect(pin).toBeTruthy();
+      await act(async()=>{setInput(deviceName,'Рабочий ПК');setInput(pin,'123456');});
+      const form=container.querySelector('form')!;
+      await act(async()=>{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await Promise.resolve();});
+      expect(acceptDeviceLink).toHaveBeenCalledWith({
+        linkToken:'one-time-token',
+        deviceName:'Рабочий ПК',
+        pin:'123456',
+        memberDisplayName:'Александр',
+        familyDisplayName:'Наша семья'
+      });
+      expect(onDone).toHaveBeenCalledTimes(1);
     }finally{
       await act(async()=>root.unmount());
       container.remove();
