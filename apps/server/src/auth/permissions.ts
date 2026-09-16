@@ -24,3 +24,11 @@ export function canManageDevice(input:PermissionInput){
   if(input.actorRole==='admin') return input.targetRole==='member';
   return false;
 }
+
+export function requireAdministrator(input:{role:FamilyRole}){
+  if(!isAdministrator(input.role)) throw Object.assign(new Error('administrator_required'),{statusCode:403});
+}
+
+export function requireOwner(input:{role:FamilyRole}){
+  if(input.role!=='owner') throw Object.assign(new Error('owner_required'),{statusCode:403});
+}

@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import type { FamilyRole } from '../auth/permissions.js';
 
 export type BootstrapInput = {
   familyDisplayName:string; memberDisplayName:string; deviceName:string;
@@ -10,7 +11,7 @@ export async function createFamilyBootstrap(tx:PoolClient,input:BootstrapInput) 
   const familyId=family.rows[0]!.id;
   const member = await tx.query<{id:string}>(`INSERT INTO members(display_name) VALUES($1) RETURNING id`,[input.memberDisplayName]);
   const memberId=member.rows[0]!.id;
-  await tx.query(`INSERT INTO family_memberships(family_id,member_id,role,status) VALUES($1,$2,'admin','active')`,[familyId,memberId]);
+  await tx.query(`INSERT INTO family_memberships(family_id,member_id,role,status) VALUES($1,$2,'owner','active')`,[familyId,memberId]);
   const device = await tx.query<{id:string}>(`INSERT INTO devices(family_id,member_id,device_name,encryption_public_key,signing_public_key,status) VALUES($1,$2,$3,$4,$5,'active') RETURNING id`,[familyId,memberId,input.deviceName,input.encryptionPublicKey,input.signingPublicKey]);
   const deviceId=device.rows[0]!.id;
   const chat=await tx.query<{id:string}>(`INSERT INTO chats(family_id,kind) VALUES($1,'family') RETURNING id`,[familyId]);
@@ -24,7 +25,7 @@ export async function createFamilyBootstrap(tx:PoolClient,input:BootstrapInput) 
 export async function getFamilySummary(tx:PoolClient,familyId:string) {
   const family=await tx.query<{id:string;display_name:string}>(`SELECT id,display_name FROM families WHERE id=$1`,[familyId]);
   if(!family.rows[0]) return null;
-  const members=await tx.query<{id:string;display_name:string;role:'admin'|'member';status:string}>(`
+  const members=await tx.query<{id:string;display_name:string;role:FamilyRole;status:string}>(`
     SELECT m.id,m.display_name,fm.role,fm.status FROM members m JOIN family_memberships fm ON fm.member_id=m.id WHERE fm.family_id=$1 ORDER BY fm.created_at`,[familyId]);
   const chat=await tx.query<{id:string}>(`SELECT id FROM chats WHERE family_id=$1 AND kind='family'`,[familyId]);
   return {id:family.rows[0].id,displayName:family.rows[0].display_name,familyChatId:chat.rows[0]?.id ?? null,members:members.rows.map(r=>({id:r.id,displayName:r.display_name,role:r.role,status:r.status}))};
@@ -34,8 +35,8 @@ export async function promoteAdministrator(tx:PoolClient,familyId:string,memberI
   const locked=await tx.query(`SELECT id FROM families WHERE id=$1 FOR UPDATE`,[familyId]);
   if(!locked.rowCount) throw new Error('family_not_found');
   const admins=await tx.query<{count:string}>(`SELECT count(*)::text count FROM family_memberships WHERE family_id=$1 AND role='admin' AND status='active'`,[familyId]);
-  if(Number(admins.rows[0]!.count)>=2) throw new Error('administrator_limit_reached');
-  const result=await tx.query(`UPDATE family_memberships SET role='admin' WHERE family_id=$1 AND member_id=$2 AND status='active'`,[familyId,memberId]);
+  if(Number(admins.rows[0]!.count)>=1) throw new Error('administrator_limit_reached');
+  const result=await tx.query(`UPDATE family_memberships SET role='admin' WHERE family_id=$1 AND member_id=$2 AND status='active' AND role='member'`,[familyId,memberId]);
   if(!result.rowCount) throw new Error('member_not_found');
 }
 
