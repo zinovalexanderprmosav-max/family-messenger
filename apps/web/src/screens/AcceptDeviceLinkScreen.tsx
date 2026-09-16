@@ -1,5 +1,5 @@
 import { useEffect,useState,type FormEvent } from 'react';
-import { inspectDeviceLinkToken,type DeviceLinkInspection } from '../flows/device-link.js';
+import { acceptDeviceLink,inspectDeviceLinkToken,type DeviceLinkInspection } from '../flows/device-link.js';
 
 export function AcceptDeviceLinkForm(props:{
   inspection:DeviceLinkInspection;
@@ -25,13 +25,32 @@ export function AcceptDeviceLinkForm(props:{
 
 export function AcceptDeviceLinkScreen(props:{token:string;onDone:()=>void}){
   const [inspection,setInspection]=useState<DeviceLinkInspection|null>(null);
-  const [error,setError]=useState('');
+  const [inspectError,setInspectError]=useState('');
+  const [submitError,setSubmitError]=useState('');
+  const [busy,setBusy]=useState(false);
   useEffect(()=>{
     let current=true;
-    void inspectDeviceLinkToken(props.token).then(value=>{if(current)setInspection(value);}).catch(reason=>{if(current)setError(reason instanceof Error?reason.message:'Ссылка недействительна');});
+    void inspectDeviceLinkToken(props.token).then(value=>{if(current)setInspection(value);}).catch(reason=>{if(current)setInspectError(reason instanceof Error?reason.message:'Ссылка недействительна');});
     return()=>{current=false;};
   },[props.token]);
-  if(error)return <main className="center-card"><section className="panel"><h2>Не удалось проверить ссылку</h2><p className="error">{error}</p></section></main>;
+
+  async function submit(deviceName:string,pin:string){
+    if(!inspection||busy)return;
+    setBusy(true);setSubmitError('');
+    try{
+      await acceptDeviceLink({
+        linkToken:props.token,
+        deviceName,
+        pin,
+        memberDisplayName:inspection.memberDisplayName,
+        familyDisplayName:inspection.familyDisplayName
+      });
+      props.onDone();
+    }catch(reason){setSubmitError(reason instanceof Error?reason.message:'Не удалось подключить устройство');}
+    finally{setBusy(false);}
+  }
+
+  if(inspectError)return <main className="center-card"><section className="panel"><h2>Не удалось проверить ссылку</h2><p className="error">{inspectError}</p></section></main>;
   if(!inspection)return <main className="center-card">Проверяем ссылку…</main>;
-  return <main className="center-card"><AcceptDeviceLinkForm inspection={inspection} busy={false} error="" onSubmit={()=>{}}/></main>;
+  return <main className="center-card"><AcceptDeviceLinkForm inspection={inspection} busy={busy} error={submitError} onSubmit={(deviceName,pin)=>void submit(deviceName,pin)}/></main>;
 }
