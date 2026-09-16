@@ -18,7 +18,14 @@ export async function registerMessageRoutes(app:FastifyInstance,pool:DatabasePoo
     if(envelope.chatId!==request.params.chatId||envelope.senderDeviceId!==p.deviceId)return reply.code(400).send({error:'message_identity_mismatch'});
     const auth=await authorizeChat(pool,{chatId:request.params.chatId,familyId:p.familyId,memberId:p.memberId,deviceId:p.deviceId,keyVersion:envelope.keyVersion});
     if(!auth)return reply.code(404).send({error:'chat_not_found'});if(!auth.allowed)return reply.code(409).send({error:'key_version_mismatch',currentKeyVersion:auth.currentKeyVersion});
-    const tx=await pool.connect();try{await tx.query('BEGIN');const stored=await insertMessageEnvelope(tx,envelope);await tx.query('COMMIT');hub.publish(p.familyId,{type:'reconcile.required',chatId:envelope.chatId,latestSequence:stored.sequence});return reply.code(stored.inserted?201:200).send({...envelope,sequence:stored.sequence,acceptedAt:stored.acceptedAt});}catch(error){await tx.query('ROLLBACK');throw error;}finally{tx.release();}
+    const tx=await pool.connect();try{
+      await tx.query('BEGIN');
+      const result=await insertMessageEnvelope(tx,envelope);
+      if(result.kind==='conflict'){await tx.query('ROLLBACK');return reply.code(409).send({error:'message_id_conflict'});}
+      await tx.query('COMMIT');
+      if(result.kind==='inserted')hub.publish(p.familyId,{type:'reconcile.required',chatId:envelope.chatId,latestSequence:result.stored.sequence});
+      return reply.code(result.kind==='inserted'?201:200).send(result.stored);
+    }catch(error){await tx.query('ROLLBACK').catch(()=>{});throw error;}finally{tx.release();}
   });
 
   app.get<{Params:{chatId:string};Querystring:{after?:string;limit?:string}}>('/v1/chats/:chatId/messages',async(request,reply)=>{
