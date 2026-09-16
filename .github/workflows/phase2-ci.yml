@@ -22,8 +22,17 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Run tests
-        run: npm test -- --run
+      - name: Test web
+        run: npm run test -w apps/web -- --run
+
+      - name: Test server
+        run: npm run test -w apps/server -- --run --passWithNoTests
+
+      - name: Test crypto
+        run: npm run test -w packages/crypto -- --run --passWithNoTests
+
+      - name: Test protocol
+        run: npm run test -w packages/protocol -- --run --passWithNoTests
 
       - name: Typecheck
         run: npm run typecheck
