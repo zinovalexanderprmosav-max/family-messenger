@@ -3,13 +3,9 @@ import { BootstrapFamilyRequest } from '@family-messenger/protocol';
 import type { DatabasePool } from '../db/pool.js';
 import { appendAuditEvent } from '../audit/repository.js';
 import { createFamilyBootstrap, getFamilySummary, promoteAdministrator } from './repository.js';
-import { createSession, requireSession, setSessionCookie, type SessionPrincipal } from '../auth/session.js';
+import { createSession, requireSession, setSessionCookie } from '../auth/session.js';
 import { requireCsrf } from '../auth/csrf.js';
-
-async function assertAdmin(tx: import('pg').PoolClient, principal:SessionPrincipal){
-  const r=await tx.query<{role:string;status:string}>(`SELECT role,status FROM family_memberships WHERE family_id=$1 AND member_id=$2`,[principal.familyId,principal.memberId]);
-  if(r.rows[0]?.role!=='admin'||r.rows[0]?.status!=='active') throw Object.assign(new Error('administrator_required'),{statusCode:403});
-}
+import { requireOwner } from '../auth/permissions.js';
 
 export async function registerFamilyRoutes(app:FastifyInstance,pool:DatabasePool,production:boolean){
   app.post('/v1/families/bootstrap',async(request,reply)=>{
@@ -33,13 +29,20 @@ export async function registerFamilyRoutes(app:FastifyInstance,pool:DatabasePool
   });
 
   app.post<{Params:{memberId:string}}>('/v1/family/admins/:memberId/promote',async(request,reply)=>{
-    const principal=await requireSession(request,pool); requireCsrf(request,principal);
+    const principal=await requireSession(request,pool);
+    requireCsrf(request,principal);
+    requireOwner(principal);
     const tx=await pool.connect();
     try{
-      await tx.query('BEGIN'); await assertAdmin(tx,principal);
+      await tx.query('BEGIN');
       await promoteAdministrator(tx,principal.familyId,request.params.memberId);
       await appendAuditEvent(tx,{familyId:principal.familyId,actorDeviceId:principal.deviceId,eventType:'family.admin.promoted',details:{memberId:request.params.memberId}});
-      await tx.query('COMMIT'); return reply.code(204).send();
-    }catch(error){await tx.query('ROLLBACK');if(error instanceof Error&&error.message==='administrator_limit_reached') return reply.code(409).send({error:error.message});throw error;}finally{tx.release();}
+      await tx.query('COMMIT');
+      return reply.code(204).send();
+    }catch(error){
+      await tx.query('ROLLBACK');
+      if(error instanceof Error&&error.message==='administrator_limit_reached') return reply.code(409).send({error:error.message});
+      throw error;
+    }finally{tx.release();}
   });
 }
