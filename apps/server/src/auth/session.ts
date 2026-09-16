@@ -2,9 +2,15 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { PoolClient } from 'pg';
 import type { DatabasePool } from '../db/pool.js';
+import type { FamilyRole } from './permissions.js';
 
 export type SessionPrincipal = {
-  deviceId:string; memberId:string; familyId:string; deviceStatus:'pending_key'|'active'|'revoked'; csrfToken:string;
+  deviceId:string;
+  memberId:string;
+  familyId:string;
+  deviceStatus:'pending_key'|'active';
+  role:FamilyRole;
+  csrfToken:string;
 };
 
 export function hashOpaqueToken(token:string){ return createHash('sha256').update(token,'utf8').digest('hex'); }
@@ -23,12 +29,34 @@ export function setSessionCookie(reply:FastifyReply,token:string,production:bool
 }
 
 export async function findSession(pool:DatabasePool,token:string):Promise<SessionPrincipal|null>{
-  const r=await pool.query<{device_id:string;member_id:string;family_id:string;csrf_token:string;status:'pending_key'|'active'|'revoked'}>(`
-    SELECT s.device_id,s.member_id,s.family_id,s.csrf_token,d.status
-    FROM sessions s JOIN devices d ON d.id=s.device_id
-    WHERE s.token_hash=$1 AND s.expires_at>now()`,[hashOpaqueToken(token)]);
+  const r=await pool.query<{
+    device_id:string;
+    member_id:string;
+    family_id:string;
+    csrf_token:string;
+    status:'pending_key'|'active';
+    role:FamilyRole;
+  }>(`
+    SELECT s.device_id,s.member_id,s.family_id,s.csrf_token,d.status,fm.role
+    FROM sessions s
+    JOIN devices d ON d.id=s.device_id
+    JOIN family_memberships fm ON fm.family_id=s.family_id AND fm.member_id=s.member_id
+    WHERE s.token_hash=$1
+      AND s.expires_at>now()
+      AND d.status IN ('pending_key','active')
+      AND fm.status='active'
+    LIMIT 1`,[hashOpaqueToken(token)]);
   const row=r.rows[0];
-  return row?{deviceId:row.device_id,memberId:row.member_id,familyId:row.family_id,csrfToken:row.csrf_token,deviceStatus:row.status}:null;
+  if(!row) return null;
+  await pool.query(`UPDATE devices SET last_seen_at=now() WHERE id=$1`,[row.device_id]);
+  return {
+    deviceId:row.device_id,
+    memberId:row.member_id,
+    familyId:row.family_id,
+    csrfToken:row.csrf_token,
+    deviceStatus:row.status,
+    role:row.role
+  };
 }
 
 export async function requireSession(request:FastifyRequest,pool:DatabasePool):Promise<SessionPrincipal>{
