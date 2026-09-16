@@ -22,3 +22,7 @@ export function AcceptDeviceLinkForm(props:{
     </form>
   </section>;
 }
+
+export function AcceptDeviceLinkScreen(_props:{token:string;onDone:()=>void}){
+  return <main className="center-card">Проверяем ссылку…</main>;
+}
