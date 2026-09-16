@@ -13,6 +13,7 @@ import { registerKeyRoutes } from './keys/routes.js';
 import { registerMessageRoutes } from './messages/routes.js';
 import { registerMemberRoutes } from './members/routes.js';
 import { registerDeviceRoutes } from './devices/routes.js';
+import { registerDeviceLinkRoutes } from './device-links/routes.js';
 import { RealtimeHub } from './realtime/hub.js';
 import { registerRealtimeRoutes } from './realtime/routes.js';
 
@@ -35,6 +36,7 @@ export async function buildApp(options:{skipDatabase?:boolean;pool?:DatabasePool
     await registerKeyRoutes(app,pool);
     await registerMemberRoutes(app,pool);
     await registerDeviceRoutes(app,pool);
+    await registerDeviceLinkRoutes(app,pool,config.nodeEnv==='production');
     await registerMessageRoutes(app,pool,hub);
     await registerRealtimeRoutes(app,pool,hub);
   }
