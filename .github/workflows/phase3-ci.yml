@@ -1,0 +1,59 @@
+name: Phase 3 CI
+
+on:
+  push:
+    branches:
+      - feat/phase3-family-contacts-media
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: family
+          POSTGRES_USER: family
+          POSTGRES_PASSWORD: family-dev-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U family -d family"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://family:family-dev-only@localhost:5432/family
+      DATABASE_URL: postgres://family:family-dev-only@localhost:5432/family
+      NODE_ENV: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Test protocol
+        run: npm run test -w packages/protocol -- --run --passWithNoTests
+
+      - name: Test crypto
+        run: npm run test -w packages/crypto -- --run --passWithNoTests
+
+      - name: Test server
+        run: npm run test -w apps/server -- --run --passWithNoTests
+
+      - name: Test web
+        run: npm run test -w apps/web -- --run
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
