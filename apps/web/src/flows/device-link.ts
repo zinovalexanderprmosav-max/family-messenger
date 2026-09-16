@@ -26,8 +26,8 @@ export function consumeDeviceLinkTokenFromHash(
   return token;
 }
 
-export async function createDeviceLink():Promise<CreatedDeviceLink|null>{
-  return null;
+export async function createDeviceLink(){
+  return api<CreatedDeviceLink>('/v1/device-links',{method:'POST',body:'{}'});
 }
 
 export async function inspectDeviceLinkToken(linkToken:string){
