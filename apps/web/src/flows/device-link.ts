@@ -13,6 +13,8 @@ export type DeviceLinkInspection={
   expiresAt:string;
 };
 
+export type CreatedDeviceLink={deviceLinkId:string;linkToken:string;expiresAt:string};
+
 export function consumeDeviceLinkTokenFromHash(
   locationLike:Pick<Location,'hash'>=window.location,
   historyLike:Pick<History,'replaceState'>=history
@@ -22,6 +24,10 @@ export function consumeDeviceLinkTokenFromHash(
   const token=decodeURIComponent(match[1]!);
   historyLike.replaceState(null,'','/#/device-link');
   return token;
+}
+
+export async function createDeviceLink():Promise<CreatedDeviceLink|null>{
+  return null;
 }
 
 export async function inspectDeviceLinkToken(linkToken:string){
