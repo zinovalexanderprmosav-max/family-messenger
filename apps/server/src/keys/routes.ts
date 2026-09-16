@@ -24,7 +24,7 @@ export async function registerKeyRoutes(app:FastifyInstance,pool:DatabasePool){
   });
 
   app.get<{Params:{chatId:string}}>('/v1/keys/chat/:chatId/current',async(request,reply)=>{
-    const p=await requireSession(request,pool); if(p.deviceStatus==='revoked') return reply.code(403).send({error:'device_revoked'});
+    const p=await requireSession(request,pool);
     const tx=await pool.connect(); try{const envelope=await getCurrentKeyEnvelope(tx,{chatId:request.params.chatId,deviceId:p.deviceId,familyId:p.familyId});if(!envelope) return reply.code(404).send({error:'key_envelope_not_ready'});return envelope;}finally{tx.release();}
   });
 }

@@ -26,9 +26,8 @@ export async function registerFamilyRoutes(app:FastifyInstance,pool:DatabasePool
     }catch(error){await tx.query('ROLLBACK');throw error;}finally{tx.release();}
   });
 
-  app.get('/v1/family',async(request,reply)=>{
+  app.get('/v1/family',async(request)=>{
     const principal=await requireSession(request,pool);
-    if(principal.deviceStatus==='revoked') return reply.code(401).send({error:'authentication_required'});
     const tx=await pool.connect();
     try{return await getFamilySummary(tx,principal.familyId);}finally{tx.release();}
   });
