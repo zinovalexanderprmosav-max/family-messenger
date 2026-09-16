@@ -2,8 +2,8 @@
 import 'fake-indexeddb/auto';
 import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { clearLocalData } from '../local/db.js';
-import { loadProfile,setUnlockedPin } from '../local/session.js';
-import { acceptDeviceLink,consumeDeviceLinkTokenFromHash } from './device-link.js';
+import { loadProfile,saveProfile,setUnlockedPin } from '../local/session.js';
+import { acceptDeviceLink,consumeDeviceLinkTokenFromHash,createDeviceLink } from './device-link.js';
 
 const TOKEN='device-link-token-abcdefghijklmnopqrstuvwxyz123456';
 const FAMILY_ID='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -23,6 +23,18 @@ describe('additional device linking',()=>{
     const token=consumeDeviceLinkTokenFromHash({hash:`#/device-link?token=${encodeURIComponent(TOKEN)}`} as Pick<Location,'hash'>,{replaceState} as Pick<History,'replaceState'>);
     expect(token).toBe(TOKEN);
     expect(replaceState).toHaveBeenCalledWith(null,'','/#/device-link');
+  });
+
+  it('creates a short-lived link from the current member session',async()=>{
+    await saveProfile({familyId:FAMILY_ID,memberId:MEMBER_ID,deviceId:DEVICE_ID,familyChatId:CHAT_ID,status:'active',csrfToken:'csrf-owner',memberDisplayName:'Александр',familyDisplayName:'Наша семья'});
+    vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+      expect(String(input)).toBe('/v1/device-links');
+      expect(init?.method).toBe('POST');
+      const headers=new Headers(init?.headers);
+      expect(headers.get('x-csrf-token')).toBe('csrf-owner');
+      return new Response(JSON.stringify({deviceLinkId:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',linkToken:TOKEN,expiresAt:'2026-09-16T14:00:00.000Z'}),{status:201,headers:{'content-type':'application/json'}});
+    }));
+    await expect(createDeviceLink()).resolves.toEqual(expect.objectContaining({linkToken:TOKEN}));
   });
 
   it('stores the server-returned existing member id instead of creating a duplicate profile',async()=>{
