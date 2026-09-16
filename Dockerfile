@@ -14,6 +14,9 @@ RUN npm run build -w apps/web
 
 FROM node:22.16.0-alpine AS runtime
 COPY --from=caddy:2.10.2-alpine /usr/bin/caddy /usr/bin/caddy
+RUN apk add --no-cache libcap \
+    && setcap -r /usr/bin/caddy \
+    && apk del libcap
 WORKDIR /app
 COPY --from=build /app /app
 COPY Render.Caddyfile /etc/caddy/Caddyfile
