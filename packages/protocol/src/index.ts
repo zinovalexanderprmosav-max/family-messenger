@@ -4,6 +4,8 @@ export const Id = z.string().uuid();
 export const Base64 = z.string().min(1);
 export const DisplayName = z.string().trim().min(1).max(80);
 export const DeviceName = z.string().trim().min(1).max(100);
+export const FamilyRoleSchema = z.enum(['owner','admin','member']);
+export type FamilyRole = z.infer<typeof FamilyRoleSchema>;
 
 export const BootstrapFamilyRequest = z.object({
   familyDisplayName: DisplayName,
@@ -34,6 +36,8 @@ export const ApproveDeviceRequest = z.object({
   keyVersion: z.number().int().positive(),
   sealedKeyEnvelope: Base64
 });
+
+export const RenameDeviceRequest = z.object({deviceName:DeviceName});
 
 export const EncryptedMessageEnvelopeSchema = z.object({
   messageId: Id,

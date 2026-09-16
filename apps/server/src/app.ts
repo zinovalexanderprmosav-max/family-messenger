@@ -11,6 +11,8 @@ import { registerFamilyRoutes } from './families/routes.js';
 import { registerInvitationRoutes } from './invitations/routes.js';
 import { registerKeyRoutes } from './keys/routes.js';
 import { registerMessageRoutes } from './messages/routes.js';
+import { registerMemberRoutes } from './members/routes.js';
+import { registerDeviceRoutes } from './devices/routes.js';
 import { RealtimeHub } from './realtime/hub.js';
 import { registerRealtimeRoutes } from './realtime/routes.js';
 
@@ -23,13 +25,16 @@ export async function buildApp(options:{skipDatabase?:boolean;pool?:DatabasePool
   await app.register(websocket);
   app.get('/health',async()=>({status:'ok' as const,service:'family-messenger-server' as const}));
   if(!options.skipDatabase){
-    const pool=options.pool??createPool(config.databaseUrl); if(!options.pool)app.addHook('onClose',async()=>{await pool.end();});
+    const pool=options.pool??createPool(config.databaseUrl);
+    if(!options.pool)app.addHook('onClose',async()=>{await pool.end();});
     await migrate(pool);
     const hub=new RealtimeHub();
     await registerDeviceAuthRoutes(app,pool,config.nodeEnv==='production');
     await registerFamilyRoutes(app,pool,config.nodeEnv==='production');
     await registerInvitationRoutes(app,pool,config.nodeEnv==='production');
     await registerKeyRoutes(app,pool);
+    await registerMemberRoutes(app,pool);
+    await registerDeviceRoutes(app,pool);
     await registerMessageRoutes(app,pool,hub);
     await registerRealtimeRoutes(app,pool,hub);
   }
