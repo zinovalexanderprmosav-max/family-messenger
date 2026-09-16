@@ -1,5 +1,8 @@
+// @vitest-environment node
+import { readFileSync } from 'node:fs';
 import { describe,expect,it } from 'vitest';
-import css from './app.css?raw';
+
+const css=readFileSync(new URL('./app.css',import.meta.url),'utf8');
 
 describe('approved Phase 2 visual system',()=>{
   it('defines a dedicated dark theme palette',()=>{
