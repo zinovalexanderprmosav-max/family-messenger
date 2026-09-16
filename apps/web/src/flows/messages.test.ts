@@ -89,8 +89,7 @@ describe('offline message outbox',()=>{
     }));
     const first=flushOutbox(CHAT_ID,PIN);
     const second=flushOutbox(CHAT_ID,PIN);
-    await Promise.resolve();
-    expect(calls).toBe(1);
+    await vi.waitFor(()=>expect(calls).toBe(1));
     releaseFetch?.();
     await Promise.all([first,second]);
     expect(calls).toBe(1);
