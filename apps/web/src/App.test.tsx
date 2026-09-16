@@ -15,6 +15,9 @@ vi.mock('./flows/join.js',()=>({
 vi.mock('./flows/device-link.js',()=>({
   consumeDeviceLinkTokenFromHash:vi.fn()
 }));
+vi.mock('./components/ThemeControl.js',()=>({
+  ThemeControl:()=>null
+}));
 vi.mock('./screens/AcceptDeviceLinkScreen.js',()=>({
   AcceptDeviceLinkScreen:({token}:{token:string})=><main>DEVICE LINK ROUTE {token}</main>
 }));
