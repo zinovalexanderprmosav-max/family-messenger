@@ -33,6 +33,6 @@ export async function buildApp(options:{skipDatabase?:boolean;pool?:DatabasePool
     await registerMessageRoutes(app,pool,hub);
     await registerRealtimeRoutes(app,pool,hub);
   }
-  app.setErrorHandler((error,_request,reply)=>{const status=(error as Error&{statusCode?:number}).statusCode??500;reply.code(status).send({error:status>=500?'internal_error':error.message});});
+  app.setErrorHandler((error,_request,reply)=>{const typed=error as Error&{statusCode?:number};const status=typed.statusCode??500;reply.code(status).send({error:status>=500?'internal_error':typed.message});});
   return app;
 }
