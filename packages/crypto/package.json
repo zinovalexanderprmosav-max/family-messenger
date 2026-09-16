@@ -1,0 +1,18 @@
+{
+  "name": "@family-messenger/crypto",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "libsodium-wrappers-sumo": "^0.8.4",
+    "@family-messenger/protocol": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vitest": "^5.0.1"
+  }
+}

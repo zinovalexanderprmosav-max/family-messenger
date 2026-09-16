@@ -1,0 +1,17 @@
+:{$PORT} {
+  encode gzip zstd
+
+  handle /v1/* {
+    reverse_proxy 127.0.0.1:8787
+  }
+
+  handle /health {
+    reverse_proxy 127.0.0.1:8787
+  }
+
+  handle {
+    root * /app/apps/web/dist
+    try_files {path} /index.html
+    file_server
+  }
+}

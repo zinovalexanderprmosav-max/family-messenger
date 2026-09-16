@@ -1,0 +1,1 @@
+export function ConnectionBadge({state}:{state:'connecting'|'online'|'offline'}){const label=state==='online'?'В сети':state==='connecting'?'Подключение…':'Нет связи';return <span className={`badge badge-${state}`}>{label}</span>;}
