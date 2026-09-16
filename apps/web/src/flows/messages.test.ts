@@ -1,3 +1,4 @@
+// @vitest-environment node
 import 'fake-indexeddb/auto';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encryptKeystore, encryptTextMessage, toBase64, type EncryptedKeystoreBlob } from '@family-messenger/crypto';
@@ -25,7 +26,7 @@ beforeAll(async()=>{
 
 beforeEach(async()=>{
   vi.restoreAllMocks();
-  Object.defineProperty(navigator,'onLine',{configurable:true,value:true});
+  vi.stubGlobal('navigator',{onLine:true});
   await clearLocalData();
   const db=await getDb();
   await db.put('profile',{id:'current',profile:{familyId:FAMILY_ID,memberId:MEMBER_ID,deviceId:DEVICE_ID,familyChatId:CHAT_ID,status:'active',csrfToken:'csrf',memberDisplayName:'Alex',familyDisplayName:'Наша семья'}});
@@ -66,7 +67,7 @@ describe('offline message outbox',()=>{
     await flushOutbox(CHAT_ID,PIN);
     expect(sent).toEqual(['11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222']);
     expect(await listOutbox(CHAT_ID)).toHaveLength(0);
-    expect((await getDb()).count('messages')).resolves.toBe(2);
+    await expect((await getDb()).count('messages')).resolves.toBe(2);
   });
 
   it('returns a failed transport attempt to queued state',async()=>{
@@ -80,17 +81,17 @@ describe('offline message outbox',()=>{
 
   it('serializes concurrent flush triggers',async()=>{
     await makeQueued('44444444-4444-4444-8444-444444444444','once','2026-09-16T10:00:03.000Z');
-    let resolveFetch:((response:Response)=>void)|undefined;
+    let releaseFetch:(()=>void)|undefined;
     let calls=0;
     vi.stubGlobal('fetch',vi.fn((_input:RequestInfo|URL,init?:RequestInit)=>{
       calls+=1;const body=String(init?.body??'');
-      return new Promise<Response>(resolve=>{resolveFetch=response=>resolve(response);}).then(()=>canonicalResponse(body,'1'));
+      return new Promise<void>(resolve=>{releaseFetch=resolve;}).then(()=>canonicalResponse(body,'1'));
     }));
     const first=flushOutbox(CHAT_ID,PIN);
     const second=flushOutbox(CHAT_ID,PIN);
     await Promise.resolve();
     expect(calls).toBe(1);
-    resolveFetch?.(new Response());
+    releaseFetch?.();
     await Promise.all([first,second]);
     expect(calls).toBe(1);
   });
