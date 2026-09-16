@@ -1,5 +1,5 @@
 import { describe,expect,it } from 'vitest';
-import { canManageDevice,canManageMember,isAdministrator } from './permissions.js';
+import { canManageDevice,canManageMember,isAdministrator,requireAdministrator,requireOwner } from './permissions.js';
 
 describe('family role permissions',()=>{
   it('treats owner and secondary admin as administrators',()=>{
@@ -29,5 +29,22 @@ describe('family role permissions',()=>{
     expect(canManageDevice({actorRole:'admin',actorMemberId:'a',targetRole:'owner',targetMemberId:'o'})).toBe(false);
     expect(canManageDevice({actorRole:'member',actorMemberId:'m',targetRole:'member',targetMemberId:'m'})).toBe(true);
     expect(canManageDevice({actorRole:'member',actorMemberId:'m',targetRole:'member',targetMemberId:'other'})).toBe(false);
+  });
+
+  it('provides centralized administrator and owner guards',()=>{
+    expect(()=>requireAdministrator({role:'owner'})).not.toThrow();
+    expect(()=>requireAdministrator({role:'admin'})).not.toThrow();
+    expect(()=>requireOwner({role:'owner'})).not.toThrow();
+
+    for(const call of [
+      ()=>requireAdministrator({role:'member'}),
+      ()=>requireOwner({role:'admin'}),
+      ()=>requireOwner({role:'member'})
+    ]){
+      try{call();throw new Error('expected_forbidden');}
+      catch(error){
+        expect((error as Error&{statusCode?:number}).statusCode).toBe(403);
+      }
+    }
   });
 });
