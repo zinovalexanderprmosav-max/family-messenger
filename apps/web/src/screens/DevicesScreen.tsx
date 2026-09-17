@@ -64,6 +64,15 @@ export function DevicesScreen(){
     }catch(reason){setError(reason instanceof Error?reason.message:'Не удалось переименовать устройство');}
   }
 
+  async function revoke(device:DeviceItem){
+    if(!confirm(`Отключить устройство «${device.deviceName}»? Оно потеряет доступ к новым сообщениям.`))return;
+    setError('');
+    try{
+      await api<void>(`/v1/devices/${device.deviceId}`,{method:'DELETE'});
+      setItems(current=>current.filter(item=>item.deviceId!==device.deviceId));
+    }catch(reason){setError(reason instanceof Error?reason.message:'Не удалось отключить устройство');}
+  }
+
   return <section className="panel section-screen devices-screen">
     <div className="section-heading"><div><h2>Устройства</h2><p className="hint">До трёх устройств на одного участника.</p></div><button className="primary" type="button" onClick={()=>void connectMine()}>Подключить моё устройство</button></div>
     {qr&&<div className="qr-box"><img src={qr} alt="QR подключения моего устройства"/><small>{qrUrl}</small></div>}
@@ -78,7 +87,7 @@ export function DevicesScreen(){
           ?<div className="device-edit"><input aria-label="Название устройства" value={editingName} onChange={event=>setEditingName(event.target.value)}/><div className="device-actions"><button type="button" onClick={()=>void saveRename(device.deviceId)}>Сохранить</button><button type="button" onClick={()=>{setEditingId(null);setEditingName('');}}>Отмена</button></div></div>
           :<><strong>{device.deviceName}</strong><small>{device.memberDisplayName} · {statusLabel(device.status)}</small>{device.lastSeenAt&&<small>Последняя активность: {new Date(device.lastSeenAt).toLocaleString()}</small>}</>}
       </div>
-      {device.canManage&&device.status!=='revoked'&&editingId!==device.deviceId&&<div className="device-actions"><button type="button" onClick={()=>startRename(device)}>Переименовать</button></div>}
+      {device.canManage&&device.status!=='revoked'&&editingId!==device.deviceId&&<div className="device-actions"><button type="button" onClick={()=>startRename(device)}>Переименовать</button><button className="danger" type="button" onClick={()=>void revoke(device)}>Отключить</button></div>}
     </article>)}</div>
   </section>;
 }
