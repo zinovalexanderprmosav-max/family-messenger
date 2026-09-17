@@ -1,12 +1,12 @@
 import 'fake-indexeddb/auto';
 import { afterEach,describe,expect,it,vi } from 'vitest';
-import { fromBase64,generateDeviceIdentity,openConversationKey,toBase64 } from '@family-messenger/crypto';
+import { generateDeviceIdentity,openConversationKey,toBase64 } from '@family-messenger/crypto';
 import { clearLocalData,resetDbHandleForTests } from '../src/local/db.js';
 import { createLockedDeviceProfile,loadChatKey } from '../src/local/keystore.js';
 import { saveProfile } from '../src/local/session.js';
 import { openDirectChat } from '../src/flows/direct-chat.js';
 
-const pin='2468';
+const pin='246824';
 
 afterEach(async()=>{
   vi.unstubAllGlobals();
