@@ -87,8 +87,15 @@ export async function registerDirectChatRoutes(app:FastifyInstance,pool:Database
         LIMIT 1
       `,[principal.familyId,principal.memberId,request.params.memberId]);
       if(existing.rows[0]){
+        const envelope=await tx.query<{sealed_key_envelope:string}>(`
+          SELECT sealed_key_envelope
+          FROM device_key_envelopes
+          WHERE chat_id=$1 AND key_version=$2 AND device_id=$3
+          LIMIT 1
+        `,[existing.rows[0].id,existing.rows[0].key_version,principal.deviceId]);
+        if(!envelope.rows[0]) throw Object.assign(new Error('chat_key_envelope_not_found'),{statusCode:409});
         await tx.query('COMMIT');
-        return reply.code(200).send({status:'ready',chatId:existing.rows[0].id,keyVersion:existing.rows[0].key_version});
+        return reply.code(200).send({status:'ready',chatId:existing.rows[0].id,keyVersion:existing.rows[0].key_version,sealedKeyEnvelope:envelope.rows[0].sealed_key_envelope});
       }
 
       const devices=await tx.query<{id:string}>(`
@@ -100,6 +107,8 @@ export async function registerDirectChatRoutes(app:FastifyInstance,pool:Database
       const providedIds=input.envelopes.map(item=>item.deviceId).sort();
       const exactSet=expectedIds.length===providedIds.length&&expectedIds.every((id,index)=>id===providedIds[index]);
       if(!exactSet) throw Object.assign(new Error('device_key_set_changed'),{statusCode:409});
+      const currentEnvelope=input.envelopes.find(item=>item.deviceId===principal.deviceId);
+      if(!currentEnvelope) throw Object.assign(new Error('device_key_set_changed'),{statusCode:409});
 
       const chat=(await tx.query<{id:string}>(`INSERT INTO chats(family_id,kind) VALUES($1,'direct') RETURNING id`,[principal.familyId])).rows[0]!;
       await tx.query(`INSERT INTO chat_members(chat_id,member_id) VALUES($1,$2),($1,$3)`,[chat.id,principal.memberId,request.params.memberId]);
@@ -109,7 +118,7 @@ export async function registerDirectChatRoutes(app:FastifyInstance,pool:Database
       }
       await appendAuditEvent(tx,{familyId:principal.familyId,actorDeviceId:principal.deviceId,eventType:'direct_chat.created',details:{chatId:chat.id,memberId:request.params.memberId}});
       await tx.query('COMMIT');
-      return reply.code(201).send({status:'ready',chatId:chat.id,keyVersion:1});
+      return reply.code(201).send({status:'ready',chatId:chat.id,keyVersion:1,sealedKeyEnvelope:currentEnvelope.sealedKeyEnvelope});
     }catch(error){
       await tx.query('ROLLBACK');
       throw error;
