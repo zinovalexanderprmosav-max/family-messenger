@@ -1,9 +1,9 @@
-name: Phase 3B1 CI
+name: Phase 3B2 CI
 
 on:
   push:
     branches:
-      - feat/phase3b1-direct-chat-core
+      - feat/phase3b2-mobile-direct-chat
 
 jobs:
   full-project:
