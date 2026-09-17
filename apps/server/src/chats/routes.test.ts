@@ -84,4 +84,42 @@ describe('direct chat preparation',()=>{
       expect(foreign.statusCode).toBe(404);
     }finally{await app.close();}
   });
+
+  it('initializes a direct chat key exactly once using sealed envelopes for every active participant device',async()=>{
+    const app=await buildApp({pool});
+    try{
+      const s=await seed();
+      const headers={cookie:'fm_session=owner-token','x-csrf-token':'owner-csrf'};
+      const prepared=await app.inject({method:'POST',url:`/v1/direct-chats/${s.other.memberId}/prepare`,headers,payload:{}});
+      expect([200,201]).toContain(prepared.statusCode);
+      const {chatId}=prepared.json();
+
+      const initialized=await app.inject({
+        method:'POST',url:`/v1/chats/${chatId}/keys/initialize`,headers,
+        payload:{keyVersion:1,envelopes:[
+          {deviceId:s.owner.deviceId,sealedKeyEnvelope:'sealed-direct-owner'},
+          {deviceId:s.other.deviceId,sealedKeyEnvelope:'sealed-direct-mama'}
+        ]}
+      });
+      expect(initialized.statusCode).toBe(201);
+
+      const versions=await pool.query(`SELECT key_version FROM conversation_key_versions WHERE chat_id=$1`,[chatId]);
+      expect(versions.rows).toEqual([{key_version:1}]);
+      const envelopes=await pool.query<{device_id:string;sealed_key_envelope:string}>(`SELECT device_id,sealed_key_envelope FROM device_key_envelopes WHERE chat_id=$1 ORDER BY device_id`,[chatId]);
+      expect(envelopes.rows).toEqual(expect.arrayContaining([
+        {device_id:s.owner.deviceId,sealed_key_envelope:'sealed-direct-owner'},
+        {device_id:s.other.deviceId,sealed_key_envelope:'sealed-direct-mama'}
+      ]));
+
+      const duplicate=await app.inject({
+        method:'POST',url:`/v1/chats/${chatId}/keys/initialize`,headers,
+        payload:{keyVersion:1,envelopes:[
+          {deviceId:s.owner.deviceId,sealedKeyEnvelope:'different-owner'},
+          {deviceId:s.other.deviceId,sealedKeyEnvelope:'different-mama'}
+        ]}
+      });
+      expect(duplicate.statusCode).toBe(409);
+      expect(duplicate.json()).toEqual({error:'chat_keys_already_initialized'});
+    }finally{await app.close();}
+  });
 });
