@@ -14,7 +14,42 @@ export type PreparedDirectChat={
   created:boolean;
 };
 
+export type ChatListItem=
+  | {chatId:string;kind:'family';title:string}
+  | {chatId:string;kind:'direct';title:string;otherMemberId:string};
+
 function canonicalPair(a:string,b:string){return a.localeCompare(b)<=0?[a,b] as const:[b,a] as const;}
+
+export async function listChats(tx:PoolClient,input:{familyId:string;memberId:string}):Promise<ChatListItem[]>{
+  const r=await tx.query<{
+    chat_id:string;
+    kind:'family'|'direct';
+    family_title:string;
+    other_member_id:string|null;
+    other_display_name:string|null;
+  }>(`
+    SELECT c.id chat_id,c.kind,f.display_name family_title,
+           other_member.id other_member_id,other_member.display_name other_display_name
+    FROM chats c
+    JOIN families f ON f.id=c.family_id
+    JOIN chat_members mine ON mine.chat_id=c.id AND mine.member_id=$2
+    LEFT JOIN LATERAL (
+      SELECT m.id,m.display_name
+      FROM chat_members cm
+      JOIN members m ON m.id=cm.member_id
+      WHERE cm.chat_id=c.id AND cm.member_id<>$2
+      ORDER BY m.id
+      LIMIT 1
+    ) other_member ON c.kind='direct'
+    WHERE c.family_id=$1
+    ORDER BY CASE WHEN c.kind='family' THEN 0 ELSE 1 END,
+             COALESCE(other_member.display_name,f.display_name),c.created_at,c.id
+  `,[input.familyId,input.memberId]);
+
+  return r.rows.map(row=>row.kind==='family'
+    ? {chatId:row.chat_id,kind:'family',title:row.family_title}
+    : {chatId:row.chat_id,kind:'direct',title:row.other_display_name??'Личный чат',otherMemberId:row.other_member_id!});
+}
 
 export async function prepareDirectChat(tx:PoolClient,input:{familyId:string;actorMemberId:string;targetMemberId:string}):Promise<PreparedDirectChat>{
   if(input.actorMemberId===input.targetMemberId) throw Object.assign(new Error('direct_chat_self'),{statusCode:400});
