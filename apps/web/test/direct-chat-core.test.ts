@@ -58,4 +58,24 @@ describe('mobile direct chat core',()=>{
     expect(result).toEqual({chatId:'chat-new',keyVersion:1});
     expect(calls).toEqual(['seal:phone-a,phone-b','post:member-mama:2','save:chat-new:1:1.2.3.4']);
   });
+
+  it('uses the server envelope when another phone wins the direct chat creation race',async()=>{
+    const calls:string[]=[];
+    const result=await ensureDirectChat('member-mama',{
+      prepare:async()=>({status:'needs_key',devices:[
+        {deviceId:'phone-a',memberId:'member-me',encryptionPublicKey:'pk-a'},
+        {deviceId:'phone-b',memberId:'member-mama',encryptionPublicKey:'pk-b'}
+      ]}),
+      localKeyExists:async()=>false,
+      restoreExistingKey:async ready=>{calls.push(`restore:${ready.sealedKeyEnvelope}`);},
+      createConversationMaterial:async()=>({key:new Uint8Array([9,9,9]),envelopes:[
+        {deviceId:'phone-a',sealedKeyEnvelope:'candidate-a'},
+        {deviceId:'phone-b',sealedKeyEnvelope:'candidate-b'}
+      ]}),
+      createRemote:async()=>({status:'ready',chatId:'chat-won-elsewhere',keyVersion:4,sealedKeyEnvelope:'canonical-for-this-phone'}),
+      saveCreatedKey:async()=>{calls.push('saved-candidate-key');}
+    });
+    expect(result).toEqual({chatId:'chat-won-elsewhere',keyVersion:4});
+    expect(calls).toEqual(['restore:canonical-for-this-phone']);
+  });
 });
