@@ -44,9 +44,14 @@ export const ApproveDeviceRequest = z.object({
   sealedKeyEnvelope: Base64
 });
 
+const SealedKeyEnvelopeTarget = z.object({deviceId:Id,sealedKeyEnvelope:Base64});
 export const InitializeChatKeysRequest = z.object({
   keyVersion:z.literal(1),
-  envelopes:z.array(z.object({deviceId:Id,sealedKeyEnvelope:Base64})).min(1)
+  envelopes:z.array(SealedKeyEnvelopeTarget).min(1)
+});
+export const CompleteKeyRotationRequest = z.object({
+  toKeyVersion:z.number().int().min(2),
+  envelopes:z.array(SealedKeyEnvelopeTarget)
 });
 
 export const RenameDeviceRequest = z.object({deviceName:DeviceName});
@@ -72,11 +77,17 @@ export const AuthCompleteRequest = z.object({
   signature: Base64
 });
 
-export const RealtimeEventSchema = z.object({
-  type: z.literal('reconcile.required'),
-  chatId: Id,
-  latestSequence: z.string().regex(/^\d+$/)
+export const ReconcileRequiredEventSchema=z.object({
+  type:z.literal('reconcile.required'),
+  chatId:Id,
+  latestSequence:z.string().regex(/^\d+$/)
 });
+export const KeyRotationRequiredEventSchema=z.object({
+  type:z.literal('keys.rotation_required'),
+  chatId:Id,
+  toKeyVersion:z.number().int().min(2)
+});
+export const RealtimeEventSchema=z.discriminatedUnion('type',[ReconcileRequiredEventSchema,KeyRotationRequiredEventSchema]);
 
 export type EncryptedMessageEnvelope = z.infer<typeof EncryptedMessageEnvelopeSchema>;
 export type StoredMessageEnvelope = z.infer<typeof StoredMessageEnvelopeSchema>;
