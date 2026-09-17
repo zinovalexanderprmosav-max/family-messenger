@@ -3,9 +3,17 @@ import { InitializeChatKeysRequest } from '@family-messenger/protocol';
 import type { DatabasePool } from '../db/pool.js';
 import { requireSession } from '../auth/session.js';
 import { requireCsrf } from '../auth/csrf.js';
-import { initializeDirectChatKeys, prepareDirectChat } from './repository.js';
+import { initializeDirectChatKeys,listChats,prepareDirectChat } from './repository.js';
 
 export async function registerChatRoutes(app:FastifyInstance,pool:DatabasePool){
+  app.get('/v1/chats',async(request,reply)=>{
+    const principal=await requireSession(request,pool);
+    if(principal.deviceStatus!=='active')return reply.code(403).send({error:'device_not_active'});
+    const tx=await pool.connect();
+    try{return {items:await listChats(tx,{familyId:principal.familyId,memberId:principal.memberId})};}
+    finally{tx.release();}
+  });
+
   app.post<{Params:{memberId:string}}>('/v1/direct-chats/:memberId/prepare',async(request,reply)=>{
     const principal=await requireSession(request,pool);
     requireCsrf(request,principal);
