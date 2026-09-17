@@ -13,7 +13,7 @@ export async function acceptInvitation(input:{joinToken:string;memberDisplayName
   const identity=await generateDeviceIdentity();
   const response=await api<AcceptResponse>('/v1/invitations/accept',{method:'POST',body:JSON.stringify({joinToken:input.joinToken,memberDisplayName:input.memberDisplayName,deviceName:input.deviceName,encryptionPublicKey:toBase64(identity.encryptionPublicKey),signingPublicKey:toBase64(identity.signingPublicKey)})});
   await createLockedDeviceProfile(identity,input.pin);
-  await saveProfile({familyId:response.familyId,memberId:response.memberId,deviceId:response.deviceId,familyChatId:response.familyChatId,status:'pending_key',csrfToken:response.csrfToken,memberDisplayName:input.memberDisplayName,familyDisplayName:input.familyDisplayName});
+  await saveProfile({familyId:response.familyId,memberId:response.memberId,deviceId:response.deviceId,familyChatId:response.familyChatId,status:'pending_key',csrfToken:response.csrfToken,memberDisplayName:input.memberDisplayName,...(input.familyDisplayName!==undefined?{familyDisplayName:input.familyDisplayName}:{})});
   setUnlockedPin(input.pin);return response;
 }
 export async function completePendingApproval(pin:string){
