@@ -14,6 +14,7 @@ import { registerMessageRoutes } from './messages/routes.js';
 import { registerMemberRoutes } from './members/routes.js';
 import { registerDeviceRoutes } from './devices/routes.js';
 import { registerDeviceLinkRoutes } from './device-links/routes.js';
+import { registerChatRoutes } from './chats/routes.js';
 import { RealtimeHub } from './realtime/hub.js';
 import { registerRealtimeRoutes } from './realtime/routes.js';
 
@@ -37,6 +38,7 @@ export async function buildApp(options:{skipDatabase?:boolean;pool?:DatabasePool
     await registerMemberRoutes(app,pool);
     await registerDeviceRoutes(app,pool);
     await registerDeviceLinkRoutes(app,pool,config.nodeEnv==='production');
+    await registerChatRoutes(app,pool);
     await registerMessageRoutes(app,pool,hub);
     await registerRealtimeRoutes(app,pool,hub);
   }
