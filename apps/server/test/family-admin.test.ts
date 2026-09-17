@@ -79,6 +79,10 @@ async function promote(memberId:string,auth:{token:string;csrf:string}){
   return app.inject({method:'POST',url:`/v1/family/admins/${memberId}/promote`,headers:adminHeaders(auth)});
 }
 
+async function demote(memberId:string,auth:{token:string;csrf:string}){
+  return app.inject({method:'POST',url:`/v1/family/admins/${memberId}/demote`,headers:adminHeaders(auth)});
+}
+
 describe('primary family administrator persistence',()=>{
   it('stores the family creator as primary administrator during bootstrap',async()=>{
     const created=await bootstrapFamily();
@@ -187,5 +191,56 @@ describe('primary administrator promotion permissions',()=>{
     expect(membership.rows[0]).toEqual({role:'admin',status:'active'});
     const audit=await pool.query<{count:string}>(`SELECT count(*)::text count FROM audit_events WHERE family_id=$1 AND event_type='family.admin.promoted'`,[seeded.familyId]);
     expect(audit.rows[0]?.count).toBe('0');
+  });
+});
+
+describe('primary administrator demotion permissions',()=>{
+  it('allows the primary administrator to demote the secondary administrator and audits it',async()=>{
+    const seeded=await seedAdministratorFamily();
+    expect((await promote(seeded.mamaId,seeded.alexAuth)).statusCode).toBe(204);
+
+    const response=await demote(seeded.mamaId,seeded.alexAuth);
+
+    expect(response.statusCode).toBe(204);
+    const membership=await pool.query<{role:string;status:string}>(`SELECT role,status FROM family_memberships WHERE family_id=$1 AND member_id=$2`,[seeded.familyId,seeded.mamaId]);
+    expect(membership.rows[0]).toEqual({role:'member',status:'active'});
+    const audit=await pool.query<{event_type:string;member_id:string}>(`
+      SELECT event_type,details->>'memberId' AS member_id
+      FROM audit_events
+      WHERE family_id=$1 AND event_type='family.admin.demoted'
+    `,[seeded.familyId]);
+    expect(audit.rows).toEqual([{event_type:'family.admin.demoted',member_id:seeded.mamaId}]);
+  });
+
+  it('protects the primary administrator from demotion',async()=>{
+    const seeded=await seedAdministratorFamily();
+
+    const response=await demote(seeded.alexId,seeded.alexAuth);
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({error:'primary_administrator_protected'});
+    const membership=await pool.query<{role:string;status:string}>(`SELECT role,status FROM family_memberships WHERE family_id=$1 AND member_id=$2`,[seeded.familyId,seeded.alexId]);
+    expect(membership.rows[0]).toEqual({role:'admin',status:'active'});
+    expect(await readPrimaryAdmin(seeded.familyId)).toBe(seeded.alexId);
+  });
+
+  it('rejects demotion by the secondary administrator',async()=>{
+    const seeded=await seedAdministratorFamily();
+    expect((await promote(seeded.mamaId,seeded.alexAuth)).statusCode).toBe(204);
+
+    const response=await demote(seeded.alexId,seeded.mamaAuth);
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({error:'primary_administrator_required'});
+  });
+
+  it('returns member_not_found for a family-scoped member that does not exist',async()=>{
+    const seeded=await seedAdministratorFamily();
+    const missingMemberId='00000000-0000-4000-8000-000000000099';
+
+    const response=await demote(missingMemberId,seeded.alexAuth);
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({error:'member_not_found'});
   });
 });
