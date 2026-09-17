@@ -11,10 +11,13 @@ import { JoinFamilyScreen } from './screens/JoinFamilyScreen.js';
 import { AcceptDeviceLinkScreen } from './screens/AcceptDeviceLinkScreen.js';
 import { PendingApprovalScreen } from './screens/PendingApprovalScreen.js';
 import { FamilyChatScreen } from './screens/FamilyChatScreen.js';
+import { ChatsScreen,type DirectChatItem,type FamilyChatItem } from './screens/ChatsScreen.js';
 import { ContactsScreen,type ContactItem } from './screens/ContactsScreen.js';
 import type { LocalProfile } from './local/db.js';
 
-type SelectedChat={chatId:string;title:string;senderLabel:string};
+type SelectedChat=
+  |{kind:'family';chatId:string}
+  |{kind:'direct';chatId:string;title:string;senderLabel:string};
 
 export default function App(){
   const [profile,setProfile]=useState<LocalProfile|null|undefined>(undefined);
@@ -26,12 +29,24 @@ export default function App(){
   const refresh=()=>void loadProfile().then(setProfile);
   useEffect(refresh,[]);
 
-  async function openContact(contact:ContactItem){
+  async function openDirectChat(memberId:string,title:string){
     const pin=getUnlockedPin();
     if(!pin)throw new Error('Сначала разблокируйте приложение PIN-кодом.');
-    const opened=await openOrCreateDirectChat(contact.memberId,pin);
-    setSelectedChat({chatId:opened.chatId,title:contact.displayName,senderLabel:contact.displayName});
+    const opened=await openOrCreateDirectChat(memberId,pin);
+    setSelectedChat({kind:'direct',chatId:opened.chatId,title,senderLabel:title});
     setSection('chats');
+  }
+
+  async function openContact(contact:ContactItem){
+    await openDirectChat(contact.memberId,contact.displayName);
+  }
+
+  async function openListedDirectChat(chat:DirectChatItem){
+    await openDirectChat(chat.otherMemberId,chat.title);
+  }
+
+  function openFamilyChat(chat:FamilyChatItem){
+    setSelectedChat({kind:'family',chatId:chat.chatId});
   }
 
   let content;
@@ -43,8 +58,13 @@ export default function App(){
   else if(profile.status==='pending_key')content=<PendingApprovalScreen onDone={refresh}/>;
   else content=<AppShell active={section} onSelect={setSection}>
     {section==='chats'&&(selectedChat
-      ?<FamilyChatScreen chatId={selectedChat.chatId} title={selectedChat.title} subtitle="Личный защищённый чат" senderLabel={selectedChat.senderLabel}/>
-      :<FamilyChatScreen/>)}
+      ?<div className="open-chat">
+        <button className="chat-back" type="button" onClick={()=>setSelectedChat(null)}>← Назад к чатам</button>
+        {selectedChat.kind==='family'
+          ?<FamilyChatScreen chatId={selectedChat.chatId}/>
+          :<FamilyChatScreen chatId={selectedChat.chatId} title={selectedChat.title} subtitle="Личный защищённый чат" senderLabel={selectedChat.senderLabel}/>} 
+      </div>
+      :<ChatsScreen onOpenFamily={openFamilyChat} onOpenDirect={openListedDirectChat}/>)}
     {section==='contacts'&&<ContactsScreen onOpen={openContact}/>} 
   </AppShell>;
 
