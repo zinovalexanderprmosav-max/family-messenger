@@ -55,6 +55,15 @@ beforeEach(()=>{
       {chatId:activeProfile.familyChatId,kind:'family',title:'Наша семья'},
       {chatId:'55555555-5555-4555-8555-555555555555',kind:'direct',title:'Мама',otherMemberId:'66666666-6666-4666-8666-666666666666'}
     ]}),{status:200,headers:{'content-type':'application/json'}});
+    if(path==='/v1/family')return new Response(JSON.stringify({
+      id:activeProfile.familyId,
+      displayName:'Наша семья',
+      familyChatId:activeProfile.familyChatId,
+      members:[
+        {id:activeProfile.memberId,displayName:'Александр',role:'owner',status:'active'},
+        {id:'66666666-6666-4666-8666-666666666666',displayName:'Мама',role:'admin',status:'active'}
+      ]
+    }),{status:200,headers:{'content-type':'application/json'}});
     return new Response(JSON.stringify({error:'unexpected_request'}),{status:404,headers:{'content-type':'application/json'}});
   }));
 });
@@ -133,6 +142,26 @@ describe('App routing',()=>{
       await act(async()=>{mamaButton!.dispatchEvent(new MouseEvent('click',{bubbles:true}));await Promise.resolve();});
       expect(openOrCreateDirectChat).toHaveBeenCalledWith('66666666-6666-4666-8666-666666666666','123456');
       expect(container.textContent).toContain('DIRECT CHAT Мама');
+    }finally{
+      await act(async()=>root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows the current member name, family and owner role in Profile',async()=>{
+    vi.mocked(loadProfile).mockResolvedValue(activeProfile);
+    const container=document.createElement('div');
+    document.body.appendChild(container);
+    const root=createRoot(container);
+    try{
+      await act(async()=>{root.render(<App/>);});
+      await act(async()=>{await Promise.resolve();});
+      const profileButton=Array.from(container.querySelectorAll('button')).find(button=>button.textContent==='Профиль');
+      expect(profileButton).toBeTruthy();
+      await act(async()=>{profileButton!.dispatchEvent(new MouseEvent('click',{bubbles:true}));await Promise.resolve();await Promise.resolve();});
+      expect(container.textContent).toContain('Александр');
+      expect(container.textContent).toContain('Наша семья');
+      expect(container.textContent).toContain('Главный администратор');
     }finally{
       await act(async()=>root.unmount());
       container.remove();
