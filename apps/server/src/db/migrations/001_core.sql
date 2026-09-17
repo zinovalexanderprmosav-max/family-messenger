@@ -121,4 +121,37 @@ CREATE TABLE IF NOT EXISTS audit_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE families
+  ADD COLUMN IF NOT EXISTS primary_admin_member_id UUID;
+
+DO $$
+BEGIN
+  ALTER TABLE families
+    ADD CONSTRAINT families_primary_admin_member_fk
+    FOREIGN KEY (primary_admin_member_id)
+    REFERENCES members(id)
+    ON DELETE RESTRICT;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+UPDATE families f
+SET primary_admin_member_id = (
+  SELECT fm.member_id
+  FROM family_memberships fm
+  WHERE fm.family_id=f.id
+    AND fm.role='admin'
+    AND fm.status='active'
+  ORDER BY fm.created_at, fm.member_id
+  LIMIT 1
+)
+WHERE f.primary_admin_member_id IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM family_memberships fm
+    WHERE fm.family_id=f.id
+      AND fm.role='admin'
+      AND fm.status='active'
+  );
+
 COMMIT;
