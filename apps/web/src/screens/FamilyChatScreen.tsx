@@ -52,7 +52,7 @@ export function FamilyChatScreen(){
   const activeProfile=profile;
   async function send(e:React.FormEvent){
     e.preventDefault();const text=draft.trim();if(!text)return;setDraft('');setError('');
-    try{await sendTextMessage(text,readyPin);}
+    try{await sendTextMessage(activeProfile.familyChatId,text,readyPin);}
     catch(err){setError(err instanceof Error?err.message:'Не отправлено');}
     finally{setMessages(await readLocalVisibleMessages(activeProfile.familyChatId,readyPin));}
   }
