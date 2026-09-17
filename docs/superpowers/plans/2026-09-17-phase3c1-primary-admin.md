@@ -1,29 +1,30 @@
 # Phase 3C1 Primary Administrator Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Every production behavior change follows RED → GREEN → regression verification.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a persisted primary administrator to each family, expose it through the family API, and make promotion/demotion of the secondary administrator controllable only by the primary administrator without changing the existing `admin | member` role model.
 
-**Architecture:** Keep the current membership roles unchanged. Add nullable `families.primary_admin_member_id`, backfill existing families to their earliest active administrator, and set the creator as primary inside the existing bootstrap transaction. Administrator mutation routes authorize against the family-level primary id plus the active admin membership. The database column remains nullable for legacy-repair compatibility, while service code enforces the primary-admin invariant for privileged mutations.
+**Architecture:** Keep current membership roles unchanged. Add nullable `families.primary_admin_member_id`, backfill existing families to their earliest active administrator, and set the creator as primary inside the existing bootstrap transaction. Administrator mutation routes authorize against the family-level primary id plus active membership; repository mutations also enforce the primary-admin invariant so it is not only a route-level rule.
 
 **Tech Stack:** TypeScript, Fastify 5, PostgreSQL 16, Vitest 5, GitHub Actions, npm workspaces.
 
 **Spec:** `docs/superpowers/specs/2026-09-17-family-admin-device-trust-design.md`
 
-## Global constraints
+## Global Constraints
 
 - Work only on `feat/phase3c1-primary-admin`; do not modify `main`.
 - Preserve Phase 3B2 safe checkpoint `4d21eb029c477c7e5fd8360a978a922d822292cd`.
 - Keep membership roles exactly `admin` and `member`; do not introduce an `owner` role.
 - Allow at most two active administrators: one primary and zero/one secondary.
 - A family with `primary_admin_member_id = NULL` may still be read, but privileged administrator mutations return `primary_administrator_not_configured`.
+- The primary administrator is immutable during Phase 3C1 and cannot be promoted again or demoted.
 - Do not implement member removal, device revocation, second-device enrollment, key transfer, key rotation, or 3C5 UI in this plan.
 - Every new behavior gets a failing test first and the failure must be observed before implementation.
 - Do not weaken existing E2EE/direct-chat behavior.
 
 ---
 
-## Task 1 — Primary-admin persistence, legacy backfill, and bootstrap
+### Task 1: Persist and backfill the primary administrator
 
 **Files:**
 - Create: `.github/workflows/phase3c1-ci.yml`
@@ -31,68 +32,109 @@
 - Modify: `apps/server/src/db/migrations/001_core.sql`
 - Modify: `apps/server/src/families/repository.ts`
 
-### 1.1 Create branch-specific full CI
+**Interfaces:**
+- Consumes: existing `buildApp({pool})`, `migrate(pool)`, `POST /v1/families/bootstrap`.
+- Produces: nullable database field `families.primary_admin_member_id`; bootstrap invariant that a newly committed family points to its creator member.
 
-- [ ] Add `.github/workflows/phase3c1-ci.yml`, copied from the proven Phase 3B2 workflow but triggered only on `feat/phase3c1-primary-admin`.
-- [ ] Keep PostgreSQL 16, Node `22.16.0`, and the exact regression command sequence:
+- [ ] **Step 1: Add branch-specific CI**
+
+Create `.github/workflows/phase3c1-ci.yml` using the proven Phase 3B2 job, but trigger only on `feat/phase3c1-primary-admin`:
 
 ```yaml
-- run: npm install --no-audit --no-fund
-- run: npm run typecheck
-- run: npm test -w apps/server -- --run
-- run: npm test -w apps/web -- --run
-- run: npm test -w packages/crypto -- --run --passWithNoTests
-- run: npm test -w packages/protocol -- --run --passWithNoTests
-- run: npm run build
+name: Phase 3C1 CI
+
+on:
+  push:
+    branches:
+      - feat/phase3c1-primary-admin
+
+jobs:
+  full-project:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: family
+          POSTGRES_PASSWORD: family-dev-only
+          POSTGRES_DB: family
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U family -d family"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgres://family:family-dev-only@127.0.0.1:5432/family
+      TEST_DATABASE_URL: postgres://family:family-dev-only@127.0.0.1:5432/family
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test -w apps/server -- --run
+      - run: npm test -w apps/web -- --run
+      - run: npm test -w packages/crypto -- --run --passWithNoTests
+      - run: npm test -w packages/protocol -- --run --passWithNoTests
+      - run: npm run build
 ```
 
-### 1.2 RED — bootstrap must persist the creator as primary administrator
+- [ ] **Step 2: Write the RED bootstrap persistence test**
 
-- [ ] Create `apps/server/test/family-admin.test.ts` using the real PostgreSQL pool and `buildApp({pool})`, matching the existing server integration-test style.
-- [ ] Use a `beforeEach` truncate equivalent to the existing direct-chat test.
-- [ ] Add a test that calls `POST /v1/families/bootstrap` with a valid bootstrap payload, reads the returned `familyId` and `memberId`, then checks the stored family value.
-- [ ] Before the schema change, use JSON conversion so the test fails as an assertion rather than with `column does not exist`:
+Create `apps/server/test/family-admin.test.ts` with the real PostgreSQL pool and Fastify app. Use the same truncate list as `direct-chat.test.ts`. Bootstrap a family, read `familyId` and `memberId`, then inspect the row using JSON conversion so the pre-migration test fails on an assertion rather than `column does not exist`:
 
 ```ts
-const stored = await pool.query<{primary_admin_member_id:string|null}>(`
+const stored=await pool.query<{primary_admin_member_id:string|null}>(`
   SELECT to_jsonb(families)->>'primary_admin_member_id' AS primary_admin_member_id
   FROM families
   WHERE id=$1
-`, [body.familyId]);
+`,[body.familyId]);
 
 expect(stored.rows[0]?.primary_admin_member_id).toBe(body.memberId);
 ```
 
-- [ ] Run only this test and confirm **RED** because the value is `null`.
+Use a valid bootstrap payload containing `familyDisplayName`, `memberDisplayName`, `deviceName`, `encryptionPublicKey`, `signingPublicKey`, and `initialFamilyChatKeyEnvelope`.
+
+- [ ] **Step 3: Run the focused test and verify RED**
 
 ```bash
 npm test -w apps/server -- --run test/family-admin.test.ts
 ```
 
-Expected: test fails on the primary-admin assertion, not on setup or syntax.
+Expected: the new assertion fails because `primary_admin_member_id` is absent and JSON lookup returns `null`; setup and syntax succeed.
 
-### 1.3 RED — migration must backfill the earliest active administrator
+- [ ] **Step 4: Write RED migration backfill tests**
 
-- [ ] In the same test file, import `migrate` from `../src/db/migrate.js`.
-- [ ] Seed a legacy family with two active administrators and deterministic timestamps, leaving the family with no primary id.
-- [ ] Make the second inserted admin older by explicit `created_at`, for example `2026-01-01` versus `2026-02-01`, then call `await migrate(pool)` again.
-- [ ] Read the primary id using the same `to_jsonb(families)` expression and expect the earliest admin id.
-- [ ] Add a tie-break test only if timestamps are equal: smaller `member_id` ordering must make the result deterministic.
-- [ ] Run the focused test and observe **RED** because current `001_core.sql` performs no primary-admin backfill.
+In the same file import `migrate` from `../src/db/migrate.js`. Add two tests.
 
-### 1.4 GREEN — extend the existing idempotent core migration
+First, seed a family with two active admins and explicit membership timestamps such that admin B is older than admin A. Leave the family with no primary id, call `await migrate(pool)`, and expect B to become primary.
 
-- [ ] Do **not** introduce a new migration framework in 3C1. The current startup migrator re-runs `001_core.sql`; extend that idempotent file after all referenced tables exist and before `COMMIT`.
-- [ ] Add the column:
+Second, seed two active admins with the same `created_at`; choose deterministic UUIDs and expect the lexicographically smaller `member_id` to become primary. The intended SQL ordering is exactly:
+
+```sql
+ORDER BY fm.created_at, fm.member_id
+```
+
+- [ ] **Step 5: Run the focused suite and verify both backfill tests are RED**
+
+```bash
+npm test -w apps/server -- --run test/family-admin.test.ts
+```
+
+Expected: bootstrap persistence/backfill assertions fail for the missing feature, not for test setup.
+
+- [ ] **Step 6: Add the minimal idempotent schema migration**
+
+Keep the current startup migration model. In `001_core.sql`, after `members`/`family_memberships` exist and before `COMMIT`, add:
 
 ```sql
 ALTER TABLE families
   ADD COLUMN IF NOT EXISTS primary_admin_member_id UUID;
-```
 
-- [ ] Add the foreign key once, safely on repeated startup:
-
-```sql
 DO $$
 BEGIN
   ALTER TABLE families
@@ -103,11 +145,7 @@ BEGIN
 EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
-```
 
-- [ ] Backfill only families that currently have no configured primary administrator:
-
-```sql
 UPDATE families f
 SET primary_admin_member_id = (
   SELECT fm.member_id
@@ -128,7 +166,11 @@ WHERE f.primary_admin_member_id IS NULL
   );
 ```
 
-- [ ] In `createFamilyBootstrap`, immediately after creating the creator’s active admin membership, set the family primary id in the same transaction:
+Do not make the column `NOT NULL`; a legacy family with no active administrator must remain readable and repairable.
+
+- [ ] **Step 7: Set primary administrator during bootstrap**
+
+In `createFamilyBootstrap`, immediately after creating the creator’s active `admin` membership, add:
 
 ```ts
 await tx.query(
@@ -137,19 +179,20 @@ await tx.query(
 );
 ```
 
-### 1.5 Verify GREEN and checkpoint
+This remains inside the existing bootstrap transaction.
 
-- [ ] Run:
+- [ ] **Step 8: Run tests and typecheck to verify GREEN**
 
 ```bash
 npm test -w apps/server -- --run test/family-admin.test.ts
 npm run typecheck
 ```
 
-Expected: both primary-persistence tests pass.
+Expected: all Task 1 tests pass.
 
-- [ ] Verify the Phase 3C1 GitHub Actions run is green before moving on.
-- [ ] Commit checkpoint:
+- [ ] **Step 9: Verify CI and commit the checkpoint**
+
+Confirm the latest `Phase 3C1 CI` run for the Task 1 head is green, then commit:
 
 ```bash
 git add .github/workflows/phase3c1-ci.yml apps/server/test/family-admin.test.ts apps/server/src/db/migrations/001_core.sql apps/server/src/families/repository.ts
@@ -158,54 +201,65 @@ git commit -m "feat: persist primary family administrator"
 
 ---
 
-## Task 2 — Expose `primaryAdminMemberId` in family summary
+### Task 2: Expose `primaryAdminMemberId` in the family summary
 
 **Files:**
 - Modify: `apps/server/test/family-admin.test.ts`
 - Modify: `apps/server/src/families/repository.ts`
 
-### 2.1 RED — family summary includes the primary administrator id
+**Interfaces:**
+- Consumes: `families.primary_admin_member_id` from Task 1.
+- Produces: `GET /v1/family` response property `primaryAdminMemberId: string | null`.
 
-- [ ] Add an integration test that bootstraps a family, keeps the session cookie returned by the bootstrap response, then calls `GET /v1/family`.
-- [ ] Assert:
+- [ ] **Step 1: Write the failing family-summary test**
+
+Bootstrap a family, extract the `fm_session` cookie from the bootstrap response, then call `GET /v1/family` and assert:
 
 ```ts
 expect(response.statusCode).toBe(200);
 expect(response.json()).toMatchObject({
-  id: bootstrap.familyId,
-  primaryAdminMemberId: bootstrap.memberId
+  id:bootstrap.familyId,
+  primaryAdminMemberId:bootstrap.memberId
 });
 ```
 
-- [ ] Run the focused test and observe **RED** because the current summary omits the field.
+- [ ] **Step 2: Run the focused test and verify RED**
 
-### 2.2 GREEN — repository returns the family-level id
+```bash
+npm test -w apps/server -- --run test/family-admin.test.ts
+```
 
-- [ ] Change the family query in `getFamilySummary` to select `primary_admin_member_id`.
-- [ ] Return it as camelCase without changing existing member role strings:
+Expected: the summary assertion fails because the current repository does not return `primaryAdminMemberId`.
+
+- [ ] **Step 3: Return the field from `getFamilySummary`**
+
+Change the family row type/query to include `primary_admin_member_id` and return:
 
 ```ts
 return {
-  id: row.id,
-  displayName: row.display_name,
-  primaryAdminMemberId: row.primary_admin_member_id,
-  familyChatId: chat.rows[0]?.id ?? null,
-  members: ...
+  id:row.id,
+  displayName:row.display_name,
+  primaryAdminMemberId:row.primary_admin_member_id,
+  familyChatId:chat.rows[0]?.id ?? null,
+  members:members.rows.map(r=>({
+    id:r.id,
+    displayName:r.display_name,
+    role:r.role,
+    status:r.status
+  }))
 };
 ```
 
-- [ ] Do not change `App.tsx` in 3C1. Extra server response data is backward-compatible; visual labeling belongs to 3C5.
+Do not change the member role values and do not modify `App.tsx` in 3C1; primary/secondary visual labels belong to 3C5.
 
-### 2.3 Verify and checkpoint
-
-- [ ] Run:
+- [ ] **Step 4: Verify GREEN**
 
 ```bash
 npm test -w apps/server -- --run test/family-admin.test.ts
 npm run typecheck
 ```
 
-- [ ] Commit:
+- [ ] **Step 5: Commit**
 
 ```bash
 git add apps/server/test/family-admin.test.ts apps/server/src/families/repository.ts
@@ -214,56 +268,60 @@ git commit -m "feat: expose primary administrator in family summary"
 
 ---
 
-## Task 3 — Only primary administrator may promote the secondary administrator
+### Task 3: Restrict secondary-admin promotion to the primary administrator
 
 **Files:**
 - Modify: `apps/server/test/family-admin.test.ts`
 - Modify: `apps/server/src/families/routes.ts`
-- Modify only if necessary: `apps/server/src/families/repository.ts`
+- Modify: `apps/server/src/families/repository.ts`
 
-### 3.1 Extend test helpers
+**Interfaces:**
+- Consumes: configured `primary_admin_member_id`, current session principal, current `promoteAdministrator` route/repository flow.
+- Produces: `assertPrimaryAdministrator(tx, principal)`; promotion protection/error semantics `primary_administrator_required`, `primary_administrator_not_configured`, `primary_administrator_protected`, `administrator_limit_reached`.
 
-- [ ] Add a helper that creates one family containing:
-  - Alex — primary admin, active device/session;
-  - Mama — ordinary member, active device/session;
-  - Vika — ordinary member, active device/session.
-- [ ] Store `families.primary_admin_member_id = Alex` explicitly in this helper.
-- [ ] Generate distinct session tokens and CSRF values per device.
+- [ ] **Step 1: Add a deterministic three-member test fixture**
 
-### 3.2 RED — permission and limit behavior
+Create one family with:
 
-- [ ] Test: Alex promotes Mama through `POST /v1/family/admins/:memberId/promote`; expect `204`, Mama becomes active `admin`, and `family.admin.promoted` is audited.
-- [ ] Test: after Mama is promoted, Mama tries to promote Vika; expect `403` with:
-
-```json
-{"error":"primary_administrator_required"}
+```text
+Alex  -> role=admin,  status=active, primary_admin_member_id=Alex
+Mama  -> role=member, status=active
+Vika  -> role=member, status=active
 ```
 
-This must be checked before the two-admin limit so a secondary administrator does not receive a misleading `administrator_limit_reached` response.
+Give each member one active device plus distinct session token and CSRF token. Reuse `hashOpaqueToken` exactly as existing integration tests do.
 
-- [ ] Test: after Mama is promoted, Alex tries to promote Vika; expect `409` with:
+- [ ] **Step 2: Write RED promotion tests**
 
-```json
-{"error":"administrator_limit_reached"}
+Add these independent tests:
+
+```text
+A. Alex promotes Mama -> 204; Mama becomes active admin; one family.admin.promoted audit event names Mama.
+B. After Mama is promoted, Mama tries to promote Vika -> 403 primary_administrator_required.
+C. After Mama is promoted, Alex tries to promote Vika -> 409 administrator_limit_reached.
+D. Active legacy admin with primary_admin_member_id=NULL tries to promote -> 409 primary_administrator_not_configured.
+E. Alex tries to promote Alex -> 409 primary_administrator_protected; no family.admin.promoted audit event is written.
+F. Alex tries to promote an out-of-family/nonexistent member -> 404 member_not_found.
 ```
 
-- [ ] Test: a legacy family with an active admin but `primary_admin_member_id = NULL` tries to promote; expect `409` with:
+The route must check actor authority before the two-admin limit so case B returns `primary_administrator_required`, not a misleading limit error.
 
-```json
-{"error":"primary_administrator_not_configured"}
+- [ ] **Step 3: Run the focused suite and verify RED**
+
+```bash
+npm test -w apps/server -- --run test/family-admin.test.ts
 ```
 
-- [ ] Run the focused suite and confirm the new authorization tests are **RED** against the current `assertAdmin` behavior.
+Expected: new authorization/protection assertions fail against the current generic `assertAdmin` flow.
 
-### 3.3 GREEN — replace generic admin authorization for administrator mutations
+- [ ] **Step 4: Replace generic mutation authorization with `assertPrimaryAdministrator`**
 
-- [ ] In `routes.ts`, replace the promotion route’s generic `assertAdmin` check with `assertPrimaryAdministrator`.
-- [ ] Validate both the configured primary id and its membership invariant in one query:
+In `routes.ts` implement:
 
 ```ts
 async function assertPrimaryAdministrator(
-  tx: import('pg').PoolClient,
-  principal: SessionPrincipal
+  tx:import('pg').PoolClient,
+  principal:SessionPrincipal
 ){
   const result=await tx.query<{
     primary_admin_member_id:string|null;
@@ -312,13 +370,65 @@ async function assertPrimaryAdministrator(
 }
 ```
 
-- [ ] Keep repository-level row locking and the existing two-admin count check inside `promoteAdministrator`.
-- [ ] Keep `administrator_limit_reached` mapped to HTTP `409`.
-- [ ] Keep `member_not_found` family-scoped and map it to `404` if the route does not already return that status.
+Use this before `promoteAdministrator` in the promotion route.
 
-### 3.4 Verify and checkpoint
+- [ ] **Step 5: Enforce primary protection and invariant again in `promoteAdministrator`**
 
-- [ ] Run:
+Change the family row lock to return `primary_admin_member_id`. Then validate the configured primary membership before the admin-count check:
+
+```ts
+const locked=await tx.query<{primary_admin_member_id:string|null}>(
+  `SELECT primary_admin_member_id FROM families WHERE id=$1 FOR UPDATE`,
+  [familyId]
+);
+if(!locked.rows[0]) throw new Error('family_not_found');
+
+const primaryId=locked.rows[0].primary_admin_member_id;
+if(!primaryId) throw new Error('primary_administrator_not_configured');
+
+const primaryMembership=await tx.query<{role:string;status:string}>(
+  `SELECT role,status FROM family_memberships WHERE family_id=$1 AND member_id=$2`,
+  [familyId,primaryId]
+);
+if(
+  primaryMembership.rows[0]?.role!=='admin' ||
+  primaryMembership.rows[0]?.status!=='active'
+) throw new Error('primary_administrator_not_configured');
+
+if(memberId===primaryId) throw new Error('primary_administrator_protected');
+```
+
+Then keep the existing active-admin count limit and family-scoped target update.
+
+- [ ] **Step 6: Add one explicit family-admin error mapper**
+
+In `routes.ts` add a focused helper used by promotion and later demotion:
+
+```ts
+function sendFamilyAdminError(
+  reply:import('fastify').FastifyReply,
+  error:unknown
+){
+  if(!(error instanceof Error)) return false;
+  if(
+    error.message==='primary_administrator_not_configured' ||
+    error.message==='primary_administrator_protected' ||
+    error.message==='administrator_limit_reached'
+  ){
+    reply.code(409).send({error:error.message});
+    return true;
+  }
+  if(error.message==='member_not_found' || error.message==='family_not_found'){
+    reply.code(404).send({error:error.message});
+    return true;
+  }
+  return false;
+}
+```
+
+Errors thrown by `assertPrimaryAdministrator` with `statusCode:403` continue through the global Fastify error handler unchanged.
+
+- [ ] **Step 7: Verify GREEN and full server regression**
 
 ```bash
 npm test -w apps/server -- --run test/family-admin.test.ts
@@ -326,7 +436,7 @@ npm test -w apps/server -- --run
 npm run typecheck
 ```
 
-- [ ] Commit:
+- [ ] **Step 8: Commit**
 
 ```bash
 git add apps/server/test/family-admin.test.ts apps/server/src/families/routes.ts apps/server/src/families/repository.ts
@@ -335,42 +445,44 @@ git commit -m "feat: restrict administrator promotion to primary"
 
 ---
 
-## Task 4 — Primary administrator may demote the secondary; primary is protected
+### Task 4: Demote the secondary administrator while protecting the primary
 
 **Files:**
 - Modify: `apps/server/test/family-admin.test.ts`
 - Modify: `apps/server/src/families/repository.ts`
 - Modify: `apps/server/src/families/routes.ts`
 
-### 4.1 RED — demotion behavior
+**Interfaces:**
+- Consumes: `assertPrimaryAdministrator` and `sendFamilyAdminError` from Task 3.
+- Produces: `demoteAdministrator(tx,familyId,memberId)` and `POST /v1/family/admins/:memberId/demote`.
 
-- [ ] Test: Alex promotes Mama and then calls `POST /v1/family/admins/:mamaId/demote`; expect `204`, Mama becomes `member`, and audit event `family.admin.demoted` contains `memberId`.
-- [ ] Test: Alex calls demote targeting Alex; expect `409` with:
+- [ ] **Step 1: Write RED demotion tests**
 
-```json
-{"error":"primary_administrator_protected"}
+Add these independent tests:
+
+```text
+A. Alex promotes Mama, then demotes Mama -> 204; Mama becomes member; family.admin.demoted audit event names Mama.
+B. Alex targets Alex for demotion -> 409 primary_administrator_protected; Alex remains active admin; primary_admin_member_id is unchanged; no demotion audit is written.
+C. Promoted Mama tries to demote an administrator -> 403 primary_administrator_required.
+D. Alex demotes an out-of-family/nonexistent member -> 404 member_not_found.
+E. A family with NULL/invalid primary invariant attempts demotion -> 409 primary_administrator_not_configured.
 ```
 
-Then re-read membership and assert Alex is still active `admin` and the family’s primary id is unchanged.
+- [ ] **Step 2: Run the focused test and verify RED**
 
-- [ ] Test: promoted Mama attempts to demote an administrator; expect `403 primary_administrator_required`.
-- [ ] Test: demoting a non-existent/out-of-family member returns `404 member_not_found`.
-- [ ] Run the focused suite and confirm **RED** because the demote endpoint/function does not yet exist.
+```bash
+npm test -w apps/server -- --run test/family-admin.test.ts
+```
 
-### 4.2 GREEN — repository demotion mutation
+Expected: demote endpoint/function cases fail because they do not exist yet.
 
-- [ ] Add `demoteAdministrator(tx,familyId,memberId)` in `repository.ts`.
-- [ ] Lock the family row with `FOR UPDATE` and read `primary_admin_member_id`.
-- [ ] Behavior order:
-  1. missing family → `family_not_found`;
-  2. null/invalid primary invariant → `primary_administrator_not_configured`;
-  3. target equals primary → `primary_administrator_protected`;
-  4. update only an active `admin` target to `member`;
-  5. if no target row updated → `member_not_found`.
+- [ ] **Step 3: Add `demoteAdministrator` with service-level invariant checks**
 
-Minimal mutation shape:
+In `repository.ts` implement the family lock and primary validation using the same logic as promotion. After validating the primary membership:
 
 ```ts
+if(memberId===primaryId) throw new Error('primary_administrator_protected');
+
 const result=await tx.query(`
   UPDATE family_memberships
   SET role='member'
@@ -379,29 +491,38 @@ const result=await tx.query(`
     AND role='admin'
     AND status='active'
 `,[familyId,memberId]);
+
+if(!result.rowCount) throw new Error('member_not_found');
 ```
 
-### 4.3 GREEN — route and audit event
+Error order is fixed:
 
-- [ ] Add:
+```text
+family_not_found
+primary_administrator_not_configured
+primary_administrator_protected
+member_not_found
+```
+
+- [ ] **Step 4: Add the demotion route**
+
+Add:
 
 ```text
 POST /v1/family/admins/:memberId/demote
 ```
 
-- [ ] Require session, CSRF, and `assertPrimaryAdministrator` before repository mutation.
-- [ ] Append `family.admin.demoted` with `{memberId}`.
-- [ ] Map stable errors:
-  - `primary_administrator_not_configured` → `409`;
-  - `primary_administrator_protected` → `409`;
-  - `administrator_limit_reached` → `409`;
-  - `member_not_found` → `404`;
-  - authorization error retains its embedded `403`.
-- [ ] If useful, extract one small `sendFamilyAdminError(reply,error)` helper for the promotion/demotion routes; do not refactor unrelated route code.
+Route sequence is exactly:
 
-### 4.4 Verify and checkpoint
+```text
+requireSession -> requireCsrf -> BEGIN -> assertPrimaryAdministrator
+-> demoteAdministrator -> append family.admin.demoted audit event
+-> COMMIT -> 204
+```
 
-- [ ] Run:
+On error: `ROLLBACK`, then call `sendFamilyAdminError`; otherwise rethrow so embedded `statusCode` is preserved.
+
+- [ ] **Step 5: Verify GREEN and server regression**
 
 ```bash
 npm test -w apps/server -- --run test/family-admin.test.ts
@@ -409,7 +530,7 @@ npm test -w apps/server -- --run
 npm run typecheck
 ```
 
-- [ ] Commit:
+- [ ] **Step 6: Commit**
 
 ```bash
 git add apps/server/test/family-admin.test.ts apps/server/src/families/repository.ts apps/server/src/families/routes.ts
@@ -418,13 +539,16 @@ git commit -m "feat: protect primary admin during demotion"
 
 ---
 
-## Task 5 — Full regression, review, and 3C1 checkpoint
+### Task 5: Full regression, review, and safe 3C1 checkpoint
 
-**Files:** no new production scope; only fixes directly required by verification are allowed.
+**Files:**
+- No new feature scope. Only defects directly found by review/verification may be fixed, with a regression test first.
 
-### 5.1 Run complete verification
+**Interfaces:**
+- Consumes: completed Tasks 1–4.
+- Produces: verified branch head SHA and green CI run/job ids suitable as the 3C1 rollback checkpoint.
 
-- [ ] Run exactly:
+- [ ] **Step 1: Run the complete local-equivalent verification sequence**
 
 ```bash
 npm run typecheck
@@ -435,39 +559,55 @@ npm test -w packages/protocol -- --run --passWithNoTests
 npm run build
 ```
 
-Expected: every command exits successfully with no new warnings/errors attributable to 3C1.
+Expected: every command exits successfully.
 
-### 5.2 Review scope against the 3B2 checkpoint
+- [ ] **Step 2: Compare branch scope against the 3B2 checkpoint**
 
-- [ ] Compare `feat/phase3c1-primary-admin` against `4d21eb029c477c7e5fd8360a978a922d822292cd`.
-- [ ] Expected changed production/test surfaces are limited to:
-  - `docs/superpowers/specs/...`
-  - `docs/superpowers/plans/...`
-  - `.github/workflows/phase3c1-ci.yml`
-  - `apps/server/src/db/migrations/001_core.sql`
-  - `apps/server/src/families/repository.ts`
-  - `apps/server/src/families/routes.ts`
-  - `apps/server/test/family-admin.test.ts`
-- [ ] Any unrelated production change must be removed or separately justified before completion.
+Compare `feat/phase3c1-primary-admin` against `4d21eb029c477c7e5fd8360a978a922d822292cd`. Changed surfaces must be limited to:
 
-### 5.3 Mandatory completion gates
+```text
+docs/superpowers/specs/2026-09-17-family-admin-device-trust-design.md
+docs/superpowers/plans/2026-09-17-phase3c1-primary-admin.md
+.github/workflows/phase3c1-ci.yml
+apps/server/src/db/migrations/001_core.sql
+apps/server/src/families/repository.ts
+apps/server/src/families/routes.ts
+apps/server/test/family-admin.test.ts
+```
 
-- [ ] Use `superpowers:requesting-code-review` and address concrete findings.
-- [ ] Use `superpowers:verification-before-completion`; do not claim success from stale CI or earlier commands.
-- [ ] Confirm the latest `Phase 3C1 CI` GitHub Actions run for the final head SHA has conclusion `success`.
-- [ ] Record the final branch head SHA and CI run/job ids as the safe 3C1 checkpoint.
-- [ ] Do **not** merge into `main` unless the user explicitly requests it.
-- [ ] Finish the branch with `superpowers:finishing-a-development-branch` only after all tests and review gates are green.
+Remove unrelated production changes before completion.
 
-## Acceptance criteria for Phase 3C1
+- [ ] **Step 3: Perform the mandatory code-review gate**
 
-- New family creator is persisted as `primary_admin_member_id` in the same bootstrap transaction.
-- Existing families are deterministically backfilled to their earliest active administrator without changing role strings.
-- `GET /v1/family` includes `primaryAdminMemberId`.
+Invoke `superpowers:requesting-code-review`. Compare implementation against this plan and the approved spec. Any concrete defect is fixed through RED → GREEN before continuing.
+
+- [ ] **Step 4: Perform fresh verification before completion**
+
+Invoke `superpowers:verification-before-completion`, then rerun the required commands or confirm equivalent fresh evidence exactly as that skill requires. Do not rely on an older green run.
+
+- [ ] **Step 5: Confirm final GitHub Actions evidence**
+
+Confirm the latest `Phase 3C1 CI` run for the final branch head SHA has `conclusion: success`. Record:
+
+```text
+branch head SHA
+workflow run id
+workflow job id
+```
+
+- [ ] **Step 6: Finish the branch without merging `main`**
+
+Invoke `superpowers:finishing-a-development-branch`. Keep `main` untouched unless the user explicitly requests a merge.
+
+## Acceptance Criteria
+
+- New family creator is persisted as `primary_admin_member_id` inside the bootstrap transaction.
+- Existing families are deterministically backfilled to the earliest active administrator by `(created_at, member_id)` without changing `admin | member` roles.
+- `GET /v1/family` returns `primaryAdminMemberId`.
 - Only the configured active primary administrator can promote or demote the secondary administrator.
-- The configured primary administrator cannot be demoted.
+- The primary administrator cannot be promoted again or demoted, and protected requests do not create false audit events.
 - A third active administrator cannot be created.
-- A family without a configured/valid primary administrator rejects privileged mutations with `primary_administrator_not_configured` rather than silently treating any admin as primary.
-- Promotion and demotion create audit events.
-- Phase 3B direct chats and the full web/server/crypto/protocol build remain green.
+- A family without a configured/valid primary administrator rejects privileged mutations with `primary_administrator_not_configured`.
+- Promotion and demotion create audit events only after successful mutation.
+- Existing Phase 3B server/web/crypto/protocol tests and production build remain green.
 - `main` remains unchanged.
