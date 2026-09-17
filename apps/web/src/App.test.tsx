@@ -29,9 +29,6 @@ vi.mock('./screens/AcceptDeviceLinkScreen.js',()=>({
 vi.mock('./screens/FamilyChatScreen.js',()=>({
   FamilyChatScreen:({title}:{title?:string})=> <main>{title?`DIRECT CHAT ${title}`:'FAMILY CHAT'}</main>
 }));
-vi.mock('./screens/AdminScreen.js',()=>({
-  AdminScreen:()=> <aside>FAMILY MANAGEMENT</aside>
-}));
 
 (globalThis as typeof globalThis&{IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
 
@@ -54,6 +51,10 @@ beforeEach(()=>{
   vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
     const path=typeof input==='string'?input:input instanceof URL?input.toString():input.url;
     if(path==='/v1/contacts')return new Response(JSON.stringify({items:[{memberId:'66666666-6666-4666-8666-666666666666',displayName:'Мама',role:'admin'}]}),{status:200,headers:{'content-type':'application/json'}});
+    if(path==='/v1/chats')return new Response(JSON.stringify({items:[
+      {chatId:activeProfile.familyChatId,kind:'family',title:'Наша семья'},
+      {chatId:'55555555-5555-4555-8555-555555555555',kind:'direct',title:'Мама',otherMemberId:'66666666-6666-4666-8666-666666666666'}
+    ]}),{status:200,headers:{'content-type':'application/json'}});
     return new Response(JSON.stringify({error:'unexpected_request'}),{status:404,headers:{'content-type':'application/json'}});
   }));
 });
@@ -75,19 +76,40 @@ describe('App routing',()=>{
     }
   });
 
-  it('shows the approved four-section navigation for an active member',async()=>{
+  it('shows the approved four-section navigation and chat list for an active member',async()=>{
     vi.mocked(loadProfile).mockResolvedValue(activeProfile);
     const container=document.createElement('div');
     document.body.appendChild(container);
     const root=createRoot(container);
     try{
       await act(async()=>{root.render(<App/>);});
-      await act(async()=>{await Promise.resolve();});
+      await act(async()=>{await Promise.resolve();await Promise.resolve();});
       expect(container.textContent).toContain('Чаты');
       expect(container.textContent).toContain('Контакты');
       expect(container.textContent).toContain('Профиль');
       expect(container.textContent).toContain('Устройства');
-      expect(container.textContent).toContain('FAMILY CHAT');
+      expect(container.textContent).toContain('Семейный чат');
+    }finally{
+      await act(async()=>root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows the family chat first and opens an existing personal chat from the chat list',async()=>{
+    vi.mocked(loadProfile).mockResolvedValue(activeProfile);
+    const container=document.createElement('div');
+    document.body.appendChild(container);
+    const root=createRoot(container);
+    try{
+      await act(async()=>{root.render(<App/>);});
+      await act(async()=>{await Promise.resolve();await Promise.resolve();});
+      const rows=Array.from(container.querySelectorAll('button.chat-row'));
+      expect(rows).toHaveLength(2);
+      expect(rows[0]?.textContent).toContain('Семейный чат');
+      expect(rows[1]?.textContent).toContain('Мама');
+      await act(async()=>{rows[1]!.dispatchEvent(new MouseEvent('click',{bubbles:true}));await Promise.resolve();});
+      expect(openOrCreateDirectChat).toHaveBeenCalledWith('66666666-6666-4666-8666-666666666666','123456');
+      expect(container.textContent).toContain('DIRECT CHAT Мама');
     }finally{
       await act(async()=>root.unmount());
       container.remove();
