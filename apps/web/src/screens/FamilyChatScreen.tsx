@@ -65,7 +65,7 @@ export function FamilyChatScreen({chatId,title,subtitle,senderLabel}:ChatScreenP
     <header className="chat-header"><div><strong>{title??activeProfile.familyDisplayName??'Наша семья'}</strong><div className="hint">{subtitle??'Сквозное шифрование'}</div></div><ConnectionBadge state={connection}/></header>
     {connection==='offline'&&<div className="connection-notice offline-notice" role="status">Нет связи — сообщения сохраняются на устройстве</div>}
     {connection==='connecting'&&resending&&<div className="connection-notice reconnect-notice" role="status">Соединение восстановлено — отправляем сообщения…</div>}
-    <div className="messages">{messages.map(m=><MessageBubble key={m.messageId} message={m} mine={m.senderDeviceId===activeProfile.deviceId} senderLabel={senderLabel}/>)}</div>
+    <div className="messages">{messages.map(m=><MessageBubble key={m.messageId} message={m} mine={m.senderDeviceId===activeProfile.deviceId} {...(senderLabel===undefined?{}:{senderLabel})}/>)}</div>
     {error&&<div className="error-inline">{error}</div>}
     <form className="composer" onSubmit={send}><textarea aria-label="Сообщение" value={draft} onChange={e=>setDraft(e.target.value)} placeholder={title?`Сообщение: ${title}`:'Сообщение семье'} rows={1}/><button className="send" aria-label="Отправить">➤</button></form>
   </section>;
