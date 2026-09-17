@@ -19,4 +19,10 @@ describe('MessageBubble send state',()=>{
     const html=renderToStaticMarkup(<MessageBubble mine={false} message={{...base,sendState:'sent',sequence:'1'}}/>);
     expect(html).not.toContain('Отправлено');
   });
+
+  it('shows the supplied contact name on an incoming direct message',()=>{
+    const html=renderToStaticMarkup(<MessageBubble mine={false} senderLabel="Мама" message={{...base,sendState:'sent',sequence:'1'}}/>);
+    expect(html).toContain('Мама');
+    expect(html).not.toContain('Семья ·');
+  });
 });
