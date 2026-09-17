@@ -43,7 +43,16 @@ export async function registerDirectChatRoutes(app:FastifyInstance,pool:Database
         AND EXISTS(SELECT 1 FROM chat_members cm WHERE cm.chat_id=c.id AND cm.member_id=$3)
       LIMIT 1
     `,[principal.familyId,principal.memberId,request.params.memberId]);
-    if(existing.rows[0]) return {status:'ready' as const,chatId:existing.rows[0].id,keyVersion:existing.rows[0].key_version};
+    if(existing.rows[0]){
+      const envelope=await pool.query<{sealed_key_envelope:string}>(`
+        SELECT sealed_key_envelope
+        FROM device_key_envelopes
+        WHERE chat_id=$1 AND key_version=$2 AND device_id=$3
+        LIMIT 1
+      `,[existing.rows[0].id,existing.rows[0].key_version,principal.deviceId]);
+      if(!envelope.rows[0]) return reply.code(409).send({error:'chat_key_envelope_not_found'});
+      return {status:'ready' as const,chatId:existing.rows[0].id,keyVersion:existing.rows[0].key_version,sealedKeyEnvelope:envelope.rows[0].sealed_key_envelope};
+    }
 
     const devices=await activeDevices(pool,principal.familyId,memberIds);
     return {
