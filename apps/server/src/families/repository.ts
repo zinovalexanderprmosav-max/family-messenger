@@ -23,12 +23,12 @@ export async function createFamilyBootstrap(tx:PoolClient,input:BootstrapInput) 
 }
 
 export async function getFamilySummary(tx:PoolClient,familyId:string) {
-  const family=await tx.query<{id:string;display_name:string}>(`SELECT id,display_name FROM families WHERE id=$1`,[familyId]);
+  const family=await tx.query<{id:string;display_name:string;primary_admin_member_id:string|null}>(`SELECT id,display_name,primary_admin_member_id FROM families WHERE id=$1`,[familyId]);
   if(!family.rows[0]) return null;
   const members=await tx.query<{id:string;display_name:string;role:'admin'|'member';status:string}>(`
     SELECT m.id,m.display_name,fm.role,fm.status FROM members m JOIN family_memberships fm ON fm.member_id=m.id WHERE fm.family_id=$1 ORDER BY fm.created_at`,[familyId]);
   const chat=await tx.query<{id:string}>(`SELECT id FROM chats WHERE family_id=$1 AND kind='family'`,[familyId]);
-  return {id:family.rows[0].id,displayName:family.rows[0].display_name,familyChatId:chat.rows[0]?.id ?? null,members:members.rows.map(r=>({id:r.id,displayName:r.display_name,role:r.role,status:r.status}))};
+  return {id:family.rows[0].id,displayName:family.rows[0].display_name,primaryAdminMemberId:family.rows[0].primary_admin_member_id,familyChatId:chat.rows[0]?.id ?? null,members:members.rows.map(r=>({id:r.id,displayName:r.display_name,role:r.role,status:r.status}))};
 }
 
 export async function promoteAdministrator(tx:PoolClient,familyId:string,memberId:string) {
