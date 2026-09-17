@@ -31,7 +31,7 @@ export async function getFamilySummary(tx:PoolClient,familyId:string) {
   return {id:family.rows[0].id,displayName:family.rows[0].display_name,primaryAdminMemberId:family.rows[0].primary_admin_member_id,familyChatId:chat.rows[0]?.id ?? null,members:members.rows.map(r=>({id:r.id,displayName:r.display_name,role:r.role,status:r.status}))};
 }
 
-export async function promoteAdministrator(tx:PoolClient,familyId:string,memberId:string) {
+async function requireConfiguredPrimaryAdministrator(tx:PoolClient,familyId:string){
   const locked=await tx.query<{primary_admin_member_id:string|null}>(`SELECT primary_admin_member_id FROM families WHERE id=$1 FOR UPDATE`,[familyId]);
   if(!locked.rowCount) throw new Error('family_not_found');
   const primaryAdminMemberId=locked.rows[0]!.primary_admin_member_id;
@@ -42,10 +42,22 @@ export async function promoteAdministrator(tx:PoolClient,familyId:string,memberI
     WHERE family_id=$1 AND member_id=$2
   `,[familyId,primaryAdminMemberId]);
   if(primaryMembership.rows[0]?.role!=='admin'||primaryMembership.rows[0]?.status!=='active') throw new Error('primary_administrator_not_configured');
+  return primaryAdminMemberId;
+}
+
+export async function promoteAdministrator(tx:PoolClient,familyId:string,memberId:string) {
+  const primaryAdminMemberId=await requireConfiguredPrimaryAdministrator(tx,familyId);
   if(memberId===primaryAdminMemberId) throw new Error('primary_administrator_protected');
   const admins=await tx.query<{count:string}>(`SELECT count(*)::text count FROM family_memberships WHERE family_id=$1 AND role='admin' AND status='active'`,[familyId]);
   if(Number(admins.rows[0]!.count)>=2) throw new Error('administrator_limit_reached');
   const result=await tx.query(`UPDATE family_memberships SET role='admin' WHERE family_id=$1 AND member_id=$2 AND role='member' AND status='active'`,[familyId,memberId]);
+  if(!result.rowCount) throw new Error('member_not_found');
+}
+
+export async function demoteAdministrator(tx:PoolClient,familyId:string,memberId:string) {
+  const primaryAdminMemberId=await requireConfiguredPrimaryAdministrator(tx,familyId);
+  if(memberId===primaryAdminMemberId) throw new Error('primary_administrator_protected');
+  const result=await tx.query(`UPDATE family_memberships SET role='member' WHERE family_id=$1 AND member_id=$2 AND role='admin' AND status='active'`,[familyId,memberId]);
   if(!result.rowCount) throw new Error('member_not_found');
 }
 
