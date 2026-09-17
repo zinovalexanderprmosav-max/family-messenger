@@ -122,4 +122,22 @@ describe('direct chat preparation',()=>{
       expect(duplicate.json()).toEqual({error:'chat_keys_already_initialized'});
     }finally{await app.close();}
   });
+
+  it('lists the family chat first and names direct chats after the other participant',async()=>{
+    const app=await buildApp({pool});
+    try{
+      const s=await seed();
+      const headers={cookie:'fm_session=owner-token','x-csrf-token':'owner-csrf'};
+      const prepared=await app.inject({method:'POST',url:`/v1/direct-chats/${s.other.memberId}/prepare`,headers,payload:{}});
+      expect([200,201]).toContain(prepared.statusCode);
+      const directChatId=prepared.json().chatId as string;
+
+      const response=await app.inject({method:'GET',url:'/v1/chats',headers:{cookie:'fm_session=owner-token'}});
+      expect(response.statusCode).toBe(200);
+      expect(response.json().items).toEqual([
+        {chatId:s.owner.familyChatId,kind:'family',title:'Family'},
+        {chatId:directChatId,kind:'direct',title:'Mama',otherMemberId:s.other.memberId}
+      ]);
+    }finally{await app.close();}
+  });
 });
