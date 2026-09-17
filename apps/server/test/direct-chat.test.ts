@@ -55,9 +55,10 @@ describe('direct chat preparation',()=>{
     const seeded=await seedFamily();
     const response=await createDirectChat(seeded);
     expect(response.statusCode).toBe(201);
-    const body=response.json() as {status:string;chatId:string;keyVersion:number};
+    const body=response.json() as {status:string;chatId:string;keyVersion:number;sealedKeyEnvelope:string};
     expect(body.status).toBe('ready');
     expect(body.keyVersion).toBe(1);
+    expect(body.sealedKeyEnvelope).toBe('sealed-for-alex');
 
     const chat=await pool.query<{kind:string}>(`SELECT kind FROM chats WHERE id=$1`,[body.chatId]);
     expect(chat.rows[0]?.kind).toBe('direct');
@@ -82,7 +83,7 @@ describe('direct chat preparation',()=>{
 
     const reopened=await createDirectChat(seeded);
     expect(reopened.statusCode).toBe(200);
-    expect(reopened.json()).toMatchObject({status:'ready',chatId:createdBody.chatId,keyVersion:1});
+    expect(reopened.json()).toMatchObject({status:'ready',chatId:createdBody.chatId,keyVersion:1,sealedKeyEnvelope:'sealed-for-alex'});
     const count=await pool.query<{count:string}>(`SELECT count(*)::text count FROM chats WHERE family_id=$1 AND kind='direct'`,[seeded.familyId]);
     expect(count.rows[0]?.count).toBe('1');
   });
