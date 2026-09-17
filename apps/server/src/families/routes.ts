@@ -72,6 +72,7 @@ export async function registerFamilyRoutes(app:FastifyInstance,pool:DatabasePool
 
   app.post<{Params:{memberId:string}}>('/v1/family/admins/:memberId/promote',async(request,reply)=>{
     const principal=await requireSession(request,pool); requireCsrf(request,principal);
+    if(principal.deviceStatus!=='active') return reply.code(403).send({error:'device_not_active'});
     const tx=await pool.connect();
     try{
       await tx.query('BEGIN');
@@ -89,6 +90,7 @@ export async function registerFamilyRoutes(app:FastifyInstance,pool:DatabasePool
 
   app.post<{Params:{memberId:string}}>('/v1/family/admins/:memberId/demote',async(request,reply)=>{
     const principal=await requireSession(request,pool); requireCsrf(request,principal);
+    if(principal.deviceStatus!=='active') return reply.code(403).send({error:'device_not_active'});
     const tx=await pool.connect();
     try{
       await tx.query('BEGIN');
