@@ -70,7 +70,7 @@ describe('direct chat preparation',()=>{
     ]));
   });
 
-  it('reopens the existing direct chat without creating a duplicate',async()=>{
+  it('reopens the existing direct chat for the current device without creating a duplicate',async()=>{
     const seeded=await seedFamily();
     const created=await createDirectChat(seeded);
     expect(created.statusCode).toBe(201);
@@ -78,7 +78,7 @@ describe('direct chat preparation',()=>{
 
     const prepared=await app.inject({method:'GET',url:`/v1/members/${seeded.mamaId}/direct-chat`,headers:{cookie:`fm_session=${seeded.token}`}});
     expect(prepared.statusCode).toBe(200);
-    expect(prepared.json()).toMatchObject({status:'ready',chatId:createdBody.chatId,keyVersion:1});
+    expect(prepared.json()).toMatchObject({status:'ready',chatId:createdBody.chatId,keyVersion:1,sealedKeyEnvelope:'sealed-for-alex'});
 
     const reopened=await createDirectChat(seeded);
     expect(reopened.statusCode).toBe(200);
