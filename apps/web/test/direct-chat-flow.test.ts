@@ -1,3 +1,4 @@
+// @vitest-environment node
 import 'fake-indexeddb/auto';
 import { afterEach,describe,expect,it,vi } from 'vitest';
 import { generateDeviceIdentity,openConversationKey,toBase64 } from '@family-messenger/crypto';
