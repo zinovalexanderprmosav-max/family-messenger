@@ -1,7 +1,7 @@
 # Phase 3C — administrator hierarchy and device trust design
 
 Date: 2026-09-17
-Status: design approved in chat; implementation not started
+Status: design approved in chat; written spec awaiting user review; implementation not started
 
 ## Context
 
@@ -11,7 +11,7 @@ Phase 3C must add administrator hierarchy and safe device management without wea
 
 ## Goals
 
-1. One immutable primary administrator per family.
+1. One immutable primary administrator per family during Phase 3C.
 2. At most one secondary administrator in addition to the primary administrator.
 3. Primary administrator can appoint/remove the secondary administrator and manage all non-primary family members and their devices.
 4. Secondary administrator can manage ordinary members and their devices, but cannot remove, demote, or revoke devices belonging to the primary administrator.
@@ -22,17 +22,19 @@ Phase 3C must add administrator hierarchy and safe device management without wea
 
 ## Non-goals for the first implementation slice
 
-The first implementation slice, 3C1, does not yet add member deletion, device revocation UI, new-device QR enrollment, or private-chat key transfer. Those are separate slices 3C2–3C5 below.
+The first implementation slice, 3C1, does not yet add member deletion, device revocation UI, new-device QR enrollment, private-chat key transfer, or conversation-key rotation. Those are separate slices 3C2–3C5 below.
 
 ## Data model
 
 ### Primary administrator
 
-Add nullable `primary_admin_member_id UUID` to `families`, referencing `members(id)`.
+Add nullable `primary_admin_member_id UUID` to `families`, referencing `members(id)` with `ON DELETE RESTRICT`.
 
 The column stays nullable at the database schema level because current family bootstrap creates the family before the member. The service layer guarantees that the field is populated inside the same bootstrap transaction before commit. This avoids a risky reorder of bootstrap creation logic.
 
-For existing families, a migration backfills `primary_admin_member_id` with the earliest active administrator by `family_memberships.created_at`. If a legacy family has no active administrator, the migration leaves the field null and the service must reject privileged administrator mutations for that family with an explicit invariant error until repaired.
+For existing families, a migration backfills `primary_admin_member_id` with the earliest active administrator by `family_memberships.created_at`, using `member_id` as the deterministic tie-breaker. If a legacy family has no active administrator, the migration leaves the field null and privileged administrator mutations return `primary_administrator_not_configured` until the family is repaired.
+
+The service invariant is: a configured `primary_admin_member_id` must identify an active `admin` membership in the same family.
 
 The existing membership role values remain unchanged:
 
@@ -137,7 +139,7 @@ A revoked device may still retain keys and ciphertext that were previously store
 
 For direct chats, new key material must be created and distributed only to remaining active participant devices. For the family chat, the same current E2EE envelope model is used for remaining active devices.
 
-Key rotation will be implemented as a focused sub-slice after basic revocation behavior is established and covered by tests.
+Key rotation will be implemented as a focused sub-slice after basic revocation behavior is established and covered by tests. Until that sub-slice is complete, device revocation is not considered production-complete security behavior.
 
 ## Implementation slices
 
@@ -182,6 +184,7 @@ Key rotation will be implemented as a focused sub-slice after basic revocation b
 
 Expected stable error codes include:
 
+- `primary_administrator_not_configured`
 - `primary_administrator_required`
 - `primary_administrator_protected`
 - `administrator_limit_reached`
