@@ -25,6 +25,18 @@ async function seedFamily(){
   return {familyId:family.id,alexId:alex.id,mamaId:mama.id,alexDevice,mamaDevice,token,csrf};
 }
 
+async function createDirectChat(seeded:Awaited<ReturnType<typeof seedFamily>>){
+  return app.inject({
+    method:'POST',
+    url:`/v1/members/${seeded.mamaId}/direct-chat`,
+    headers:{cookie:`fm_session=${seeded.token}`,'x-csrf-token':seeded.csrf},
+    payload:{envelopes:[
+      {deviceId:seeded.alexDevice.id,sealedKeyEnvelope:'sealed-for-alex'},
+      {deviceId:seeded.mamaDevice.id,sealedKeyEnvelope:'sealed-for-mama'}
+    ]}
+  });
+}
+
 describe('direct chat preparation',()=>{
   it('returns active devices for both members when a direct chat does not exist',async()=>{
     const seeded=await seedFamily();
@@ -41,15 +53,7 @@ describe('direct chat preparation',()=>{
 
   it('creates one encrypted direct chat with key envelopes for every active device',async()=>{
     const seeded=await seedFamily();
-    const response=await app.inject({
-      method:'POST',
-      url:`/v1/members/${seeded.mamaId}/direct-chat`,
-      headers:{cookie:`fm_session=${seeded.token}`,'x-csrf-token':seeded.csrf},
-      payload:{envelopes:[
-        {deviceId:seeded.alexDevice.id,sealedKeyEnvelope:'sealed-for-alex'},
-        {deviceId:seeded.mamaDevice.id,sealedKeyEnvelope:'sealed-for-mama'}
-      ]}
-    });
+    const response=await createDirectChat(seeded);
     expect(response.statusCode).toBe(201);
     const body=response.json() as {status:string;chatId:string;keyVersion:number};
     expect(body.status).toBe('ready');
@@ -64,5 +68,22 @@ describe('direct chat preparation',()=>{
       {device_id:seeded.alexDevice.id,sealed_key_envelope:'sealed-for-alex'},
       {device_id:seeded.mamaDevice.id,sealed_key_envelope:'sealed-for-mama'}
     ]));
+  });
+
+  it('reopens the existing direct chat without creating a duplicate',async()=>{
+    const seeded=await seedFamily();
+    const created=await createDirectChat(seeded);
+    expect(created.statusCode).toBe(201);
+    const createdBody=created.json() as {chatId:string;keyVersion:number};
+
+    const prepared=await app.inject({method:'GET',url:`/v1/members/${seeded.mamaId}/direct-chat`,headers:{cookie:`fm_session=${seeded.token}`}});
+    expect(prepared.statusCode).toBe(200);
+    expect(prepared.json()).toMatchObject({status:'ready',chatId:createdBody.chatId,keyVersion:1});
+
+    const reopened=await createDirectChat(seeded);
+    expect(reopened.statusCode).toBe(200);
+    expect(reopened.json()).toMatchObject({status:'ready',chatId:createdBody.chatId,keyVersion:1});
+    const count=await pool.query<{count:string}>(`SELECT count(*)::text count FROM chats WHERE family_id=$1 AND kind='direct'`,[seeded.familyId]);
+    expect(count.rows[0]?.count).toBe('1');
   });
 });
