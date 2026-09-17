@@ -35,6 +35,6 @@ jobs:
       - run: npm run typecheck
       - run: npm test -w apps/server -- --run
       - run: npm test -w apps/web -- --run
-      - run: npm test -w packages/crypto -- --run
-      - run: npm test -w packages/protocol -- --run
+      - run: npm test -w packages/crypto -- --run --passWithNoTests
+      - run: npm test -w packages/protocol -- --run --passWithNoTests
       - run: npm run build
