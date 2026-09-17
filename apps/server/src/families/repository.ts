@@ -32,11 +32,20 @@ export async function getFamilySummary(tx:PoolClient,familyId:string) {
 }
 
 export async function promoteAdministrator(tx:PoolClient,familyId:string,memberId:string) {
-  const locked=await tx.query(`SELECT id FROM families WHERE id=$1 FOR UPDATE`,[familyId]);
+  const locked=await tx.query<{primary_admin_member_id:string|null}>(`SELECT primary_admin_member_id FROM families WHERE id=$1 FOR UPDATE`,[familyId]);
   if(!locked.rowCount) throw new Error('family_not_found');
+  const primaryAdminMemberId=locked.rows[0]!.primary_admin_member_id;
+  if(!primaryAdminMemberId) throw new Error('primary_administrator_not_configured');
+  const primaryMembership=await tx.query<{role:string;status:string}>(`
+    SELECT role,status
+    FROM family_memberships
+    WHERE family_id=$1 AND member_id=$2
+  `,[familyId,primaryAdminMemberId]);
+  if(primaryMembership.rows[0]?.role!=='admin'||primaryMembership.rows[0]?.status!=='active') throw new Error('primary_administrator_not_configured');
+  if(memberId===primaryAdminMemberId) throw new Error('primary_administrator_protected');
   const admins=await tx.query<{count:string}>(`SELECT count(*)::text count FROM family_memberships WHERE family_id=$1 AND role='admin' AND status='active'`,[familyId]);
   if(Number(admins.rows[0]!.count)>=2) throw new Error('administrator_limit_reached');
-  const result=await tx.query(`UPDATE family_memberships SET role='admin' WHERE family_id=$1 AND member_id=$2 AND status='active'`,[familyId,memberId]);
+  const result=await tx.query(`UPDATE family_memberships SET role='admin' WHERE family_id=$1 AND member_id=$2 AND role='member' AND status='active'`,[familyId,memberId]);
   if(!result.rowCount) throw new Error('member_not_found');
 }
 
