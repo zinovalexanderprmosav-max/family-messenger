@@ -14,6 +14,7 @@ import { FamilyChatScreen } from './screens/FamilyChatScreen.js';
 import { ChatsScreen,type DirectChatItem,type FamilyChatItem } from './screens/ChatsScreen.js';
 import { ContactsScreen,type ContactItem } from './screens/ContactsScreen.js';
 import { ProfileScreen } from './screens/ProfileScreen.js';
+import { DevicesScreen } from './screens/DevicesScreen.js';
 import type { LocalProfile } from './local/db.js';
 
 type SelectedChat=
@@ -68,6 +69,7 @@ export default function App(){
       :<ChatsScreen onOpenFamily={openFamilyChat} onOpenDirect={openListedDirectChat}/>)}
     {section==='contacts'&&<ContactsScreen onOpen={openContact}/>} 
     {section==='profile'&&<ProfileScreen currentMemberId={profile.memberId}/>} 
+    {section==='devices'&&<DevicesScreen/>} 
   </AppShell>;
 
   return <><ThemeControl/>{content}</>;
