@@ -6,7 +6,7 @@ on:
       - feat/phase3b1-direct-chat-core
 
 jobs:
-  server:
+  full-project:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -24,6 +24,7 @@ jobs:
           --health-retries=10
     env:
       DATABASE_URL: postgres://family:family-dev-only@127.0.0.1:5432/family
+      TEST_DATABASE_URL: postgres://family:family-dev-only@127.0.0.1:5432/family
       NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
@@ -31,5 +32,9 @@ jobs:
         with:
           node-version: 22.16.0
       - run: npm install --no-audit --no-fund
-      - run: npm run typecheck -w apps/server
-      - run: npm test -w apps/server -- --run test/direct-chat.test.ts
+      - run: npm run typecheck
+      - run: npm test -w apps/server -- --run
+      - run: npm test -w apps/web -- --run
+      - run: npm test -w packages/crypto -- --run
+      - run: npm test -w packages/protocol -- --run
+      - run: npm run build
