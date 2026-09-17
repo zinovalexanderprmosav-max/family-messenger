@@ -11,6 +11,7 @@ export async function createFamilyBootstrap(tx:PoolClient,input:BootstrapInput) 
   const member = await tx.query<{id:string}>(`INSERT INTO members(display_name) VALUES($1) RETURNING id`,[input.memberDisplayName]);
   const memberId=member.rows[0]!.id;
   await tx.query(`INSERT INTO family_memberships(family_id,member_id,role,status) VALUES($1,$2,'admin','active')`,[familyId,memberId]);
+  await tx.query(`UPDATE families SET primary_admin_member_id=$1 WHERE id=$2`,[memberId,familyId]);
   const device = await tx.query<{id:string}>(`INSERT INTO devices(family_id,member_id,device_name,encryption_public_key,signing_public_key,status) VALUES($1,$2,$3,$4,$5,'active') RETURNING id`,[familyId,memberId,input.deviceName,input.encryptionPublicKey,input.signingPublicKey]);
   const deviceId=device.rows[0]!.id;
   const chat=await tx.query<{id:string}>(`INSERT INTO chats(family_id,kind) VALUES($1,'family') RETURNING id`,[familyId]);
