@@ -38,4 +38,31 @@ describe('direct chat preparation',()=>{
       {deviceId:seeded.mamaDevice.id,memberId:seeded.mamaId,encryptionPublicKey:'enc-mama'}
     ]));
   });
+
+  it('creates one encrypted direct chat with key envelopes for every active device',async()=>{
+    const seeded=await seedFamily();
+    const response=await app.inject({
+      method:'POST',
+      url:`/v1/members/${seeded.mamaId}/direct-chat`,
+      headers:{cookie:`fm_session=${seeded.token}`,'x-csrf-token':seeded.csrf},
+      payload:{envelopes:[
+        {deviceId:seeded.alexDevice.id,sealedKeyEnvelope:'sealed-for-alex'},
+        {deviceId:seeded.mamaDevice.id,sealedKeyEnvelope:'sealed-for-mama'}
+      ]}
+    });
+    expect(response.statusCode).toBe(201);
+    const body=response.json() as {status:string;chatId:string;keyVersion:number};
+    expect(body.status).toBe('ready');
+    expect(body.keyVersion).toBe(1);
+
+    const chat=await pool.query<{kind:string}>(`SELECT kind FROM chats WHERE id=$1`,[body.chatId]);
+    expect(chat.rows[0]?.kind).toBe('direct');
+    const members=await pool.query(`SELECT member_id FROM chat_members WHERE chat_id=$1`,[body.chatId]);
+    expect(members.rowCount).toBe(2);
+    const envelopes=await pool.query<{device_id:string;sealed_key_envelope:string}>(`SELECT device_id,sealed_key_envelope FROM device_key_envelopes WHERE chat_id=$1 AND key_version=1 ORDER BY device_id`,[body.chatId]);
+    expect(envelopes.rows).toEqual(expect.arrayContaining([
+      {device_id:seeded.alexDevice.id,sealed_key_envelope:'sealed-for-alex'},
+      {device_id:seeded.mamaDevice.id,sealed_key_envelope:'sealed-for-mama'}
+    ]));
+  });
 });
