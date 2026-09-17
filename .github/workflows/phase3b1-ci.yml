@@ -1,0 +1,35 @@
+name: Phase 3B1 CI
+
+on:
+  push:
+    branches:
+      - feat/phase3b1-direct-chat-core
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: family
+          POSTGRES_PASSWORD: family-dev-only
+          POSTGRES_DB: family
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U family -d family"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgres://family:family-dev-only@127.0.0.1:5432/family
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck -w apps/server
+      - run: npm test -w apps/server -- --run test/direct-chat.test.ts
