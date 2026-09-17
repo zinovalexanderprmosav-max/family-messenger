@@ -22,6 +22,7 @@ export async function ensureDirectChat(memberId:string,deps:DirectChatDependenci
   }
   const material=await deps.createConversationMaterial(prepared.devices);
   const ready=await deps.createRemote(memberId,material.envelopes);
-  await deps.saveCreatedKey(ready.chatId,ready.keyVersion,material.key);
+  if(ready.sealedKeyEnvelope)await deps.restoreExistingKey(ready);
+  else await deps.saveCreatedKey(ready.chatId,ready.keyVersion,material.key);
   return {chatId:ready.chatId,keyVersion:ready.keyVersion};
 }
