@@ -36,7 +36,9 @@ async function bootstrapFamily(){
     }
   });
   expect(response.statusCode).toBe(201);
-  return response.json() as {familyId:string;memberId:string};
+  const setCookie=response.headers['set-cookie'];
+  const cookieHeader=(Array.isArray(setCookie)?setCookie[0]:setCookie)?.split(';')[0] ?? '';
+  return {...(response.json() as {familyId:string;memberId:string}),cookieHeader};
 }
 
 describe('primary family administrator persistence',()=>{
@@ -76,5 +78,16 @@ describe('primary family administrator persistence',()=>{
     await migrate(pool);
 
     expect(await readPrimaryAdmin(family.id)).toBe(smallerId);
+  });
+
+  it('returns the primary administrator id in the family summary',async()=>{
+    const created=await bootstrapFamily();
+    const response=await app.inject({method:'GET',url:'/v1/family',headers:{cookie:created.cookieHeader}});
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id:created.familyId,
+      primaryAdminMemberId:created.memberId
+    });
   });
 });
