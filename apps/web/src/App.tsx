@@ -13,6 +13,7 @@ import { PendingApprovalScreen } from './screens/PendingApprovalScreen.js';
 import { FamilyChatScreen } from './screens/FamilyChatScreen.js';
 import { ChatsScreen,type DirectChatItem,type FamilyChatItem } from './screens/ChatsScreen.js';
 import { ContactsScreen,type ContactItem } from './screens/ContactsScreen.js';
+import { ProfileScreen } from './screens/ProfileScreen.js';
 import type { LocalProfile } from './local/db.js';
 
 type SelectedChat=
@@ -66,6 +67,7 @@ export default function App(){
       </div>
       :<ChatsScreen onOpenFamily={openFamilyChat} onOpenDirect={openListedDirectChat}/>)}
     {section==='contacts'&&<ContactsScreen onOpen={openContact}/>} 
+    {section==='profile'&&<ProfileScreen currentMemberId={profile.memberId}/>} 
   </AppShell>;
 
   return <><ThemeControl/>{content}</>;
