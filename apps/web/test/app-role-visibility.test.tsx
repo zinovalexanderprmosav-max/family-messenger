@@ -26,7 +26,10 @@ vi.mock('../src/api/client.js', () => ({
     id: 'family-1',
     displayName: 'Family',
     familyChatId: 'chat-1',
-    members: [{ id: 'member-1', displayName: 'Alex', role: state.role, status: 'active' }]
+    members: [
+      { id: 'member-1', displayName: 'Alex', role: state.role, status: 'active' },
+      { id: 'member-2', displayName: 'Мама', role: 'member', status: 'active' }
+    ]
   })
 }));
 vi.mock('../src/screens/WelcomeScreen.js', () => ({ WelcomeScreen: () => <div>WELCOME</div> }));
@@ -73,5 +76,11 @@ describe('App role visibility', () => {
     await renderApp();
     expect(container.textContent).toContain('CHAT');
     expect(container.textContent).toContain('ADMIN_SCREEN');
+  });
+
+  it('shows active family members in the contacts area', async () => {
+    await renderApp();
+    expect(container.textContent).toContain('Контакты');
+    expect(container.textContent).toContain('Мама');
   });
 });
