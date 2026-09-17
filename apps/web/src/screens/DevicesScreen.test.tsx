@@ -27,10 +27,12 @@ beforeEach(()=>{
   vi.mocked(api).mockImplementation((async(path:string,options:RequestInit={})=>{
     if(path==='/v1/devices'&&(!options.method||options.method==='GET'))return {items:[device]};
     if(path===`/v1/devices/${device.deviceId}`&&options.method==='PATCH')return {deviceId:device.deviceId,deviceName:'Рабочий iPhone'};
+    if(path===`/v1/devices/${device.deviceId}`&&options.method==='DELETE')return undefined;
     throw new Error(`unexpected request: ${path}`);
   }) as typeof api);
+  vi.stubGlobal('confirm',vi.fn(()=>true));
 });
-afterEach(()=>vi.clearAllMocks());
+afterEach(()=>{vi.unstubAllGlobals();vi.clearAllMocks();});
 
 describe('device editing',()=>{
   it('renames a manageable device and updates the visible name',async()=>{
@@ -52,6 +54,19 @@ describe('device editing',()=>{
       await act(async()=>{save!.dispatchEvent(new MouseEvent('click',{bubbles:true}));await Promise.resolve();await Promise.resolve();});
       expect(api).toHaveBeenCalledWith(`/v1/devices/${device.deviceId}`,{method:'PATCH',body:JSON.stringify({deviceName:'Рабочий iPhone'})});
       expect(container.textContent).toContain('Рабочий iPhone');
+      expect(container.textContent).not.toContain('iPhone Александра');
+    }finally{await act(async()=>root.unmount());container.remove();}
+  });
+
+  it('revokes a manageable device after confirmation and removes it from the active list',async()=>{
+    const container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container);
+    try{
+      await act(async()=>{root.render(<DevicesScreen/>);await Promise.resolve();await Promise.resolve();});
+      const revoke=Array.from(container.querySelectorAll('button')).find(button=>button.textContent==='Отключить');
+      expect(revoke).toBeTruthy();
+      await act(async()=>{revoke!.dispatchEvent(new MouseEvent('click',{bubbles:true}));await Promise.resolve();await Promise.resolve();});
+      expect(confirm).toHaveBeenCalledWith('Отключить устройство «iPhone Александра»? Оно потеряет доступ к новым сообщениям.');
+      expect(api).toHaveBeenCalledWith(`/v1/devices/${device.deviceId}`,{method:'DELETE'});
       expect(container.textContent).not.toContain('iPhone Александра');
     }finally{await act(async()=>root.unmount());container.remove();}
   });
