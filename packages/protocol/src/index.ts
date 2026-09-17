@@ -44,6 +44,11 @@ export const ApproveDeviceRequest = z.object({
   sealedKeyEnvelope: Base64
 });
 
+export const InitializeChatKeysRequest = z.object({
+  keyVersion:z.literal(1),
+  envelopes:z.array(z.object({deviceId:Id,sealedKeyEnvelope:Base64})).min(1)
+});
+
 export const RenameDeviceRequest = z.object({deviceName:DeviceName});
 
 export const EncryptedMessageEnvelopeSchema = z.object({

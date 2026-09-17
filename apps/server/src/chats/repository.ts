@@ -57,3 +57,45 @@ export async function prepareDirectChat(tx:PoolClient,input:{familyId:string;act
     created
   };
 }
+
+export async function initializeDirectChatKeys(tx:PoolClient,input:{
+  familyId:string;
+  actorMemberId:string;
+  chatId:string;
+  keyVersion:1;
+  envelopes:Array<{deviceId:string;sealedKeyEnvelope:string}>;
+}){
+  const chat=await tx.query<{id:string;kind:'direct'}>(`SELECT id,kind FROM chats WHERE id=$1 AND family_id=$2 AND kind='direct' FOR UPDATE`,[input.chatId,input.familyId]);
+  if(!chat.rowCount) throw Object.assign(new Error('chat_not_found'),{statusCode:404});
+
+  const participant=await tx.query(`
+    SELECT 1
+    FROM chat_members cm
+    JOIN family_memberships fm ON fm.family_id=$1 AND fm.member_id=cm.member_id
+    WHERE cm.chat_id=$2 AND cm.member_id=$3 AND fm.status='active'`,[input.familyId,input.chatId,input.actorMemberId]);
+  if(!participant.rowCount) throw Object.assign(new Error('chat_not_found'),{statusCode:404});
+
+  const initialized=await tx.query(`SELECT 1 FROM conversation_key_versions WHERE chat_id=$1 LIMIT 1`,[input.chatId]);
+  if(initialized.rowCount) throw Object.assign(new Error('chat_keys_already_initialized'),{statusCode:409});
+
+  const required=await tx.query<{id:string}>(`
+    SELECT d.id
+    FROM chat_members cm
+    JOIN chats c ON c.id=cm.chat_id
+    JOIN family_memberships fm ON fm.family_id=c.family_id AND fm.member_id=cm.member_id
+    JOIN devices d ON d.family_id=c.family_id AND d.member_id=cm.member_id
+    WHERE cm.chat_id=$1 AND c.family_id=$2 AND fm.status='active' AND d.status='active'
+    ORDER BY d.id`,[input.chatId,input.familyId]);
+
+  const requiredIds=required.rows.map(row=>row.id).sort();
+  const providedIds=input.envelopes.map(item=>item.deviceId).sort();
+  const uniqueProvided=new Set(providedIds);
+  const exactMatch=requiredIds.length===providedIds.length&&uniqueProvided.size===providedIds.length&&requiredIds.every((id,index)=>id===providedIds[index]);
+  if(!exactMatch) throw Object.assign(new Error('key_envelope_recipient_mismatch'),{statusCode:400});
+
+  await tx.query(`INSERT INTO conversation_key_versions(chat_id,key_version) VALUES($1,$2)`,[input.chatId,input.keyVersion]);
+  for(const envelope of input.envelopes){
+    await tx.query(`INSERT INTO device_key_envelopes(chat_id,key_version,device_id,sealed_key_envelope) VALUES($1,$2,$3,$4)`,[input.chatId,input.keyVersion,envelope.deviceId,envelope.sealedKeyEnvelope]);
+  }
+  return {chatId:input.chatId,keyVersion:input.keyVersion};
+}
