@@ -33,6 +33,18 @@ export async function registerDirectChatRoutes(app:FastifyInstance,pool:Database
     const memberIds=[principal.memberId,request.params.memberId];
     const members=await activePair(pool,principal.familyId,memberIds);
     if(members.rowCount!==2) return reply.code(404).send({error:'member_not_found'});
+
+    const existing=await pool.query<{id:string;key_version:number}>(`
+      SELECT c.id,(SELECT max(key_version)::int FROM conversation_key_versions WHERE chat_id=c.id) key_version
+      FROM chats c
+      WHERE c.family_id=$1 AND c.kind='direct'
+        AND (SELECT count(*) FROM chat_members cm WHERE cm.chat_id=c.id)=2
+        AND EXISTS(SELECT 1 FROM chat_members cm WHERE cm.chat_id=c.id AND cm.member_id=$2)
+        AND EXISTS(SELECT 1 FROM chat_members cm WHERE cm.chat_id=c.id AND cm.member_id=$3)
+      LIMIT 1
+    `,[principal.familyId,principal.memberId,request.params.memberId]);
+    if(existing.rows[0]) return {status:'ready' as const,chatId:existing.rows[0].id,keyVersion:existing.rows[0].key_version};
+
     const devices=await activeDevices(pool,principal.familyId,memberIds);
     return {
       status:'needs_key' as const,
