@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { BootstrapFamilyRequest } from '@family-messenger/protocol';
 import type { DatabasePool } from '../db/pool.js';
 import { appendAuditEvent } from '../audit/repository.js';
-import { createFamilyBootstrap, getFamilySummary, promoteAdministrator } from './repository.js';
+import { createFamilyBootstrap, demoteAdministrator, getFamilySummary, promoteAdministrator } from './repository.js';
 import { createSession, requireSession, setSessionCookie, type SessionPrincipal } from '../auth/session.js';
 import { requireCsrf } from '../auth/csrf.js';
 
@@ -79,6 +79,23 @@ export async function registerFamilyRoutes(app:FastifyInstance,pool:DatabasePool
       if(request.params.memberId===principal.memberId) throw Object.assign(new Error('primary_administrator_protected'),{statusCode:409});
       await promoteAdministrator(tx,principal.familyId,request.params.memberId);
       await appendAuditEvent(tx,{familyId:principal.familyId,actorDeviceId:principal.deviceId,eventType:'family.admin.promoted',details:{memberId:request.params.memberId}});
+      await tx.query('COMMIT'); return reply.code(204).send();
+    }catch(error){
+      await tx.query('ROLLBACK');
+      if(sendFamilyAdminError(reply,error)) return;
+      throw error;
+    }finally{tx.release();}
+  });
+
+  app.post<{Params:{memberId:string}}>('/v1/family/admins/:memberId/demote',async(request,reply)=>{
+    const principal=await requireSession(request,pool); requireCsrf(request,principal);
+    const tx=await pool.connect();
+    try{
+      await tx.query('BEGIN');
+      await assertPrimaryAdministrator(tx,principal);
+      if(request.params.memberId===principal.memberId) throw Object.assign(new Error('primary_administrator_protected'),{statusCode:409});
+      await demoteAdministrator(tx,principal.familyId,request.params.memberId);
+      await appendAuditEvent(tx,{familyId:principal.familyId,actorDeviceId:principal.deviceId,eventType:'family.admin.demoted',details:{memberId:request.params.memberId}});
       await tx.query('COMMIT'); return reply.code(204).send();
     }catch(error){
       await tx.query('ROLLBACK');
