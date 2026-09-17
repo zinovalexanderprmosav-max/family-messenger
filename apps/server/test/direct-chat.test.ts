@@ -86,4 +86,35 @@ describe('direct chat preparation',()=>{
     const count=await pool.query<{count:string}>(`SELECT count(*)::text count FROM chats WHERE family_id=$1 AND kind='direct'`,[seeded.familyId]);
     expect(count.rows[0]?.count).toBe('1');
   });
+
+  it('rejects a direct chat with self',async()=>{
+    const seeded=await seedFamily();
+    const response=await app.inject({method:'GET',url:`/v1/members/${seeded.alexId}/direct-chat`,headers:{cookie:`fm_session=${seeded.token}`}});
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({error:'member_not_found'});
+  });
+
+  it('rejects a member from another family',async()=>{
+    const seeded=await seedFamily();
+    const otherFamily=(await pool.query<{id:string}>(`INSERT INTO families(display_name) VALUES('Other') RETURNING id`)).rows[0]!;
+    const outsider=(await pool.query<{id:string}>(`INSERT INTO members(display_name) VALUES('Outsider') RETURNING id`)).rows[0]!;
+    await pool.query(`INSERT INTO family_memberships(family_id,member_id,role,status) VALUES($1,$2,'member','active')`,[otherFamily.id,outsider.id]);
+    const response=await app.inject({method:'GET',url:`/v1/members/${outsider.id}/direct-chat`,headers:{cookie:`fm_session=${seeded.token}`}});
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({error:'member_not_found'});
+  });
+
+  it('rejects creation when an active mobile device has no key envelope',async()=>{
+    const seeded=await seedFamily();
+    const response=await app.inject({
+      method:'POST',
+      url:`/v1/members/${seeded.mamaId}/direct-chat`,
+      headers:{cookie:`fm_session=${seeded.token}`,'x-csrf-token':seeded.csrf},
+      payload:{envelopes:[{deviceId:seeded.alexDevice.id,sealedKeyEnvelope:'sealed-for-alex'}]}
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({error:'device_key_set_changed'});
+    const count=await pool.query<{count:string}>(`SELECT count(*)::text count FROM chats WHERE family_id=$1 AND kind='direct'`,[seeded.familyId]);
+    expect(count.rows[0]?.count).toBe('0');
+  });
 });
