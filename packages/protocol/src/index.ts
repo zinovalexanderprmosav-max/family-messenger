@@ -29,6 +29,16 @@ export const AcceptInvitationRequest = InvitationTokenRequest.extend({
   signingPublicKey: Base64
 });
 
+export const DeviceEnrollmentTokenRequest = z.object({
+  enrollmentToken: z.string().min(32)
+});
+
+export const AcceptDeviceEnrollmentRequest = DeviceEnrollmentTokenRequest.extend({
+  deviceName: DeviceName,
+  encryptionPublicKey: Base64,
+  signingPublicKey: Base64
+});
+
 export const ApproveDeviceRequest = z.object({
   chatId: Id,
   keyVersion: z.number().int().positive(),
