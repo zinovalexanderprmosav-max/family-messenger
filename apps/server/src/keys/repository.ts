@@ -7,8 +7,10 @@ export async function approveDevice(tx:PoolClient,input:{familyId:string;deviceI
   const d=await tx.query<{status:string;family_id:string}>(`SELECT status,family_id FROM devices WHERE id=$1 FOR UPDATE`,[input.deviceId]);
   const device=d.rows[0]; if(!device||device.family_id!==input.familyId) throw new Error('device_not_found');
   if(device.status!=='pending_key') throw new Error('device_not_pending');
-  const kv=await tx.query(`SELECT 1 FROM conversation_key_versions ckv JOIN chats c ON c.id=ckv.chat_id WHERE ckv.chat_id=$1 AND ckv.key_version=$2 AND c.family_id=$3`,[input.chatId,input.keyVersion,input.familyId]);
-  if(!kv.rowCount) throw new Error('key_version_not_found');
+  const kv=await tx.query<{current_key_version:number|null}>(`SELECT max(ckv.key_version)::int AS current_key_version FROM conversation_key_versions ckv JOIN chats c ON c.id=ckv.chat_id WHERE ckv.chat_id=$1 AND c.family_id=$2`,[input.chatId,input.familyId]);
+  const current=kv.rows[0]?.current_key_version;
+  if(current===null||current===undefined) throw new Error('key_version_not_found');
+  if(input.keyVersion!==current) throw Object.assign(new Error('key_version_stale'),{statusCode:409});
   await tx.query(`INSERT INTO device_key_envelopes(chat_id,key_version,device_id,sealed_key_envelope) VALUES($1,$2,$3,$4) ON CONFLICT(chat_id,key_version,device_id) DO UPDATE SET sealed_key_envelope=EXCLUDED.sealed_key_envelope`,[input.chatId,input.keyVersion,input.deviceId,input.sealedKeyEnvelope]);
   await tx.query(`UPDATE devices SET status='active' WHERE id=$1`,[input.deviceId]);
 }
