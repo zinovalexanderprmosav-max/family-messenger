@@ -68,5 +68,6 @@ export async function fetchAttachmentBlob(input:{
     attachmentId:input.attachmentId,chatId:input.chatId,nonce:stored.nonce,ciphertext:stored.ciphertext,
     key:fromBase64(input.attachmentKey)
   });
-  return new Blob([bytes],{type:input.mimeType||'application/octet-stream'});
+  const buffer=new ArrayBuffer(bytes.byteLength);new Uint8Array(buffer).set(bytes);
+  return new Blob([buffer],{type:input.mimeType||'application/octet-stream'});
 }
