@@ -43,3 +43,13 @@ jobs:
       - run: npm test -w packages/crypto -- --run --passWithNoTests
       - run: npm test -w packages/protocol -- --run --passWithNoTests
       - run: npm run build
+      - name: Package iPhone PWA build
+        run: |
+          mkdir -p artifacts/iphone-pwa
+          cp -R apps/web/dist/. artifacts/iphone-pwa/
+          (cd artifacts && zip -r FamilyMessenger-0.3.8-rc1-iPhone-PWA.zip iphone-pwa)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FamilyMessenger-0.3.8-rc1-iPhone-PWA
+          path: artifacts/FamilyMessenger-0.3.8-rc1-iPhone-PWA.zip
+          if-no-files-found: error
