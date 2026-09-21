@@ -39,8 +39,14 @@ export async function registerKeyRoutes(app:FastifyInstance,pool:DatabasePool){
       if(!ownDevice&&actor.role!=='admin')fail('administrator_required',403);
       if(!ownDevice&&(input.provisionedKeys?.length??0)>0)fail('history_provisioning_forbidden',403);
       const approved=await approveDevice(tx,{
-        familyId:p.familyId,deviceId:request.params.deviceId,actorDeviceId:p.deviceId,
-        allowHistorical:ownDevice,...input
+        familyId:p.familyId,
+        deviceId:request.params.deviceId,
+        actorDeviceId:p.deviceId,
+        chatId:input.chatId,
+        keyVersion:input.keyVersion,
+        sealedKeyEnvelope:input.sealedKeyEnvelope,
+        allowHistorical:ownDevice,
+        ...(input.provisionedKeys!==undefined?{provisionedKeys:input.provisionedKeys}:{})
       });
       await appendAuditEvent(tx,{
         familyId:p.familyId,actorDeviceId:p.deviceId,eventType:'device.approved',
