@@ -1,4 +1,4 @@
-name: Phase 3C6 CI
+name: Phase 3C7 CI
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
       - feat/phase3c4-trusted-key-provisioning
       - feat/phase3c5-device-member-management
       - feat/phase3c6-e2ee-attachments
+      - feat/phase3c7-android-apk-pwa-release
   pull_request:
     branches:
       - main
@@ -15,6 +16,7 @@ on:
       - feat/phase3c3-own-device-enrollment
       - feat/phase3c4-trusted-key-provisioning
       - feat/phase3c5-device-member-management
+      - feat/phase3c6-e2ee-attachments
 
 jobs:
   full-project:
