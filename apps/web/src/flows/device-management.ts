@@ -8,3 +8,7 @@ export async function listManagedDevices(){
 export async function revokeManagedDevice(deviceId:string){
   await api<void>(`/v1/family/devices/${encodeURIComponent(deviceId)}/revoke`,{method:'POST',body:'{}'});
 }
+
+export async function renameManagedDevice(deviceId:string,deviceName:string){
+  await api<void>(`/v1/family/devices/${encodeURIComponent(deviceId)}/rename`,{method:'POST',body:JSON.stringify({deviceName})});
+}
