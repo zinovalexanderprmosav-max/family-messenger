@@ -9,7 +9,6 @@ on:
       - feat/phase3c5-device-member-management
       - feat/phase3c6-e2ee-attachments
       - feat/phase3c7-android-apk-pwa-release
-      - feat/phase3c7-android-apk-pwa-release
       - feat/phase3c8-production-deploy
   pull_request:
     branches:
@@ -19,6 +18,7 @@ on:
       - feat/phase3c4-trusted-key-provisioning
       - feat/phase3c5-device-member-management
       - feat/phase3c6-e2ee-attachments
+      - feat/phase3c7-android-apk-pwa-release
 
 jobs:
   full-project:
