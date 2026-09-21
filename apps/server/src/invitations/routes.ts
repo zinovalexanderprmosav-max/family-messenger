@@ -52,7 +52,12 @@ export async function registerInvitationRoutes(app:FastifyInstance,pool:Database
     const input=AcceptInvitationRequest.parse(request.body); const tx=await pool.connect();
     try{
       await tx.query('BEGIN');
-      const enrollment=await consumeInvitation(tx,tokenHash(input.joinToken),input);
+      const enrollment=await consumeInvitation(tx,tokenHash(input.joinToken),{
+        deviceName:input.deviceName,
+        encryptionPublicKey:input.encryptionPublicKey,
+        signingPublicKey:input.signingPublicKey,
+        ...(input.memberDisplayName!==undefined?{memberDisplayName:input.memberDisplayName}:{})
+      });
       const session=await createSession(tx,{deviceId:enrollment.deviceId,memberId:enrollment.memberId,familyId:enrollment.familyId});
       await appendAuditEvent(tx,{familyId:enrollment.familyId,actorDeviceId:enrollment.deviceId,eventType:'invitation.accepted'});
       await tx.query('COMMIT'); setSessionCookie(reply,session.token,production);
