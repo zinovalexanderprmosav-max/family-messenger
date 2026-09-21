@@ -1,0 +1,47 @@
+name: Production Image Smoke
+
+on:
+  push:
+    branches:
+      - feat/phase3c8-production-deploy
+  pull_request:
+    branches:
+      - feat/phase3c7-android-apk-pwa-release
+
+jobs:
+  docker-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: family
+          POSTGRES_PASSWORD: family-dev-only
+          POSTGRES_DB: family
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U family -d family"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build -t family-messenger:smoke .
+      - name: Start production image
+        run: |
+          docker run -d --name family-messenger-smoke --network host             -e PORT=10000             -e NODE_ENV=production             -e DATABASE_URL=postgres://family:family-dev-only@127.0.0.1:5432/family             family-messenger:smoke
+      - name: Verify health endpoint
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:10000/health | grep -q '"status":"ok"'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs family-messenger-smoke
+          exit 1
+      - name: Stop container
+        if: always()
+        run: docker rm -f family-messenger-smoke || true

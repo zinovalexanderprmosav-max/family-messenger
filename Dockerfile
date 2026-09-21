@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package.json ./
 COPY apps/server/package.json apps/server/package.json
 COPY apps/web/package.json apps/web/package.json
+COPY apps/android-shell/package.json apps/android-shell/package.json
 COPY packages/crypto/package.json packages/crypto/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
 RUN npm install --no-audit --no-fund
