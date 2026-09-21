@@ -25,7 +25,7 @@ export function setSessionCookie(reply:FastifyReply,token:string,production:bool
 export async function findSession(pool:DatabasePool,token:string):Promise<SessionPrincipal|null>{
   const r=await pool.query<{device_id:string;member_id:string;family_id:string;csrf_token:string;status:'pending_key'|'active'|'revoked'}>(`
     SELECT s.device_id,s.member_id,s.family_id,s.csrf_token,d.status
-    FROM sessions s JOIN devices d ON d.id=s.device_id
+    FROM sessions s JOIN devices d ON d.id=s.device_id AND d.family_id=s.family_id AND d.member_id=s.member_id JOIN family_memberships fm ON fm.family_id=s.family_id AND fm.member_id=s.member_id AND fm.status='active'
     WHERE s.token_hash=$1 AND s.expires_at>now()`,[hashOpaqueToken(token)]);
   const row=r.rows[0];
   return row?{deviceId:row.device_id,memberId:row.member_id,familyId:row.family_id,csrfToken:row.csrf_token,deviceStatus:row.status}:null;
