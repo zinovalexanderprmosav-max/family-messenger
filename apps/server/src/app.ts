@@ -1,4 +1,5 @@
 import {registerMemberRoutes} from './members/routes.js';
+import {registerAttachmentRoutes} from './attachments/routes.js';
 import {registerDeviceRoutes} from './devices/routes.js';
 import {registerDeviceEnrollmentRoutes} from './device-enrollment/routes.js';
 import Fastify from 'fastify';
@@ -39,6 +40,7 @@ export async function buildApp(options:{skipDatabase?:boolean;pool?:DatabasePool
     await registerDeviceEnrollmentRoutes(app,pool,config.nodeEnv==='production');
     await registerKeyRoutes(app,pool);
     await registerKeyRotationRoutes(app,pool);
+    await registerAttachmentRoutes(app,pool);
     await registerMessageRoutes(app,pool,hub);
     await registerDirectChatRoutes(app,pool);
     await registerRealtimeRoutes(app,pool,hub);
