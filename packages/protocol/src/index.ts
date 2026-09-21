@@ -39,10 +39,17 @@ export const AcceptDeviceEnrollmentRequest = DeviceEnrollmentTokenRequest.extend
   signingPublicKey: Base64
 });
 
-export const ApproveDeviceRequest = z.object({
+export const ProvisionedChatKeySchema = z.object({
   chatId: Id,
   keyVersion: z.number().int().positive(),
   sealedKeyEnvelope: Base64
+});
+
+export const ApproveDeviceRequest = z.object({
+  chatId: Id,
+  keyVersion: z.number().int().positive(),
+  sealedKeyEnvelope: Base64,
+  provisionedKeys: z.array(ProvisionedChatKeySchema).max(500).optional()
 });
 
 export const KeyRotationDeviceSchema = z.object({
