@@ -78,6 +78,21 @@ CREATE TABLE IF NOT EXISTS device_key_envelopes (
   FOREIGN KEY(chat_id,key_version) REFERENCES conversation_key_versions(chat_id,key_version) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS chat_key_rotations (
+  chat_id UUID NOT NULL,
+  from_key_version INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('required','completed')),
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ,
+  PRIMARY KEY(chat_id,from_key_version),
+  FOREIGN KEY(chat_id,from_key_version)
+    REFERENCES conversation_key_versions(chat_id,key_version)
+    ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS chat_key_rotations_required
+  ON chat_key_rotations(chat_id,status)
+  WHERE status='required';
+
 CREATE TABLE IF NOT EXISTS message_envelopes (
   message_id UUID PRIMARY KEY,
   chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
