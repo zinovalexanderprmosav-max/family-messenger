@@ -64,5 +64,5 @@ export async function demoteAdministrator(tx:PoolClient,familyId:string,memberId
 export async function assertDeviceCapacity(tx:PoolClient,memberId:string) {
   await tx.query(`SELECT id FROM members WHERE id=$1 FOR UPDATE`,[memberId]);
   const count=await tx.query<{count:string}>(`SELECT count(*)::text count FROM devices WHERE member_id=$1 AND status <> 'revoked'`,[memberId]);
-  if(Number(count.rows[0]!.count)>=3) throw new Error('device_limit_reached');
+  if(Number(count.rows[0]!.count)>=3) throw Object.assign(new Error('device_limit_reached'),{statusCode:409});
 }

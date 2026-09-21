@@ -7,6 +7,7 @@ import {requireRotationsForRevokedDevices} from '../key-rotation/repository.js';
 export async function revokeDeviceRows(tx:PoolClient,p:SessionPrincipal,deviceIds:string[],source:string){
  const changed=await tx.query<{id:string;member_id:string}>(`UPDATE devices SET status='revoked',revoked_at=now() WHERE family_id=$1 AND id=ANY($2::uuid[]) AND status<>'revoked' RETURNING id,member_id`,[p.familyId,deviceIds]);
  const changedIds=changed.rows.map(r=>r.id);
+ await tx.query(`UPDATE device_enrollments SET revoked_at=now() WHERE created_by_device_id=ANY($1::uuid[]) AND consumed_at IS NULL AND revoked_at IS NULL`,[deviceIds]);
  await tx.query('DELETE FROM sessions WHERE device_id=ANY($1::uuid[])',[deviceIds]);
  await tx.query('DELETE FROM auth_challenges WHERE device_id=ANY($1::uuid[])',[deviceIds]);
  await requireRotationsForRevokedDevices(tx,p,changedIds);

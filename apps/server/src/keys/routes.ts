@@ -1,4 +1,4 @@
-import {lockFamily,assertActiveActor} from '../families/access.js';
+import {lockFamily,assertActiveActor,fail} from '../families/access.js';
 import type { FastifyInstance } from 'fastify';
 import { ApproveDeviceRequest } from '@family-messenger/protocol';
 import type { DatabasePool } from '../db/pool.js';
@@ -7,21 +7,42 @@ import { requireCsrf } from '../auth/csrf.js';
 import { approveDevice, getCurrentKeyEnvelope, listPendingDevices } from './repository.js';
 import { appendAuditEvent } from '../audit/repository.js';
 
-async function isAdmin(pool:DatabasePool,familyId:string,memberId:string){
-  const r=await pool.query(`SELECT 1 FROM family_memberships WHERE family_id=$1 AND member_id=$2 AND role='admin' AND status='active'`,[familyId,memberId]); return Boolean(r.rowCount);
+async function activeRole(pool:DatabasePool,familyId:string,memberId:string){
+  const r=await pool.query<{role:'admin'|'member'}>(`SELECT role FROM family_memberships WHERE family_id=$1 AND member_id=$2 AND status='active'`,[familyId,memberId]);
+  return r.rows[0]?.role??null;
 }
 
 export async function registerKeyRoutes(app:FastifyInstance,pool:DatabasePool){
   app.get('/v1/devices/pending',async(request,reply)=>{
-    const p=await requireSession(request,pool); if(p.deviceStatus!=='active'||!(await isAdmin(pool,p.familyId,p.memberId))) return reply.code(403).send({error:'administrator_required'});
-    const tx=await pool.connect(); try{return {items:await listPendingDevices(tx,p.familyId)};}finally{tx.release();}
+    const p=await requireSession(request,pool);
+    if(p.deviceStatus!=='active')return reply.code(403).send({error:'device_not_active'});
+    const role=await activeRole(pool,p.familyId,p.memberId);
+    if(!role)return reply.code(401).send({error:'authentication_required'});
+    const tx=await pool.connect();
+    try{return {items:await listPendingDevices(tx,p.familyId,role==='admin'?undefined:p.memberId)};}
+    finally{tx.release();}
   });
 
   app.post<{Params:{deviceId:string}}>('/v1/devices/:deviceId/approve',async(request,reply)=>{
-    const p=await requireSession(request,pool); requireCsrf(request,p); if(p.deviceStatus!=='active'||!(await isAdmin(pool,p.familyId,p.memberId))) return reply.code(403).send({error:'administrator_required'});
-    const input=ApproveDeviceRequest.parse(request.body); const tx=await pool.connect();
-    try{await tx.query('BEGIN');await lockFamily(tx,p.familyId);await assertActiveActor(tx,p);await approveDevice(tx,{familyId:p.familyId,deviceId:request.params.deviceId,...input});await appendAuditEvent(tx,{familyId:p.familyId,actorDeviceId:p.deviceId,eventType:'device.approved',details:{deviceId:request.params.deviceId,chatId:input.chatId,keyVersion:input.keyVersion}});await tx.query('COMMIT');return reply.code(204).send();}
-    catch(error){await tx.query('ROLLBACK');throw error;}finally{tx.release();}
+    const p=await requireSession(request,pool);requireCsrf(request,p);
+    if(p.deviceStatus!=='active')return reply.code(403).send({error:'device_not_active'});
+    const input=ApproveDeviceRequest.parse(request.body);const tx=await pool.connect();
+    try{
+      await tx.query('BEGIN');
+      await lockFamily(tx,p.familyId);
+      const actor=await assertActiveActor(tx,p);
+      const target=(await tx.query<{member_id:string}>(`
+        SELECT member_id FROM devices WHERE id=$1 AND family_id=$2
+      `,[request.params.deviceId,p.familyId])).rows[0];
+      if(!target)fail('device_not_found',404);
+      if(target.member_id!==p.memberId&&actor.role!=='admin')fail('administrator_required',403);
+      await approveDevice(tx,{familyId:p.familyId,deviceId:request.params.deviceId,...input});
+      await appendAuditEvent(tx,{
+        familyId:p.familyId,actorDeviceId:p.deviceId,eventType:'device.approved',
+        details:{deviceId:request.params.deviceId,chatId:input.chatId,keyVersion:input.keyVersion}
+      });
+      await tx.query('COMMIT');return reply.code(204).send();
+    }catch(error){await tx.query('ROLLBACK');throw error;}finally{tx.release();}
   });
 
   app.get<{Params:{chatId:string}}>('/v1/keys/chat/:chatId/current',async(request,reply)=>{
