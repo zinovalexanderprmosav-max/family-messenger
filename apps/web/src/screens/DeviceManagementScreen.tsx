@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 import QRCode from 'qrcode';
 import {createOwnDeviceEnrollment} from '../flows/device-enrollment.js';
 import {approvePendingDevice,deviceFingerprint,listPendingDevices} from '../flows/approve-device.js';
-import {listManagedDevices,revokeManagedDevice} from '../flows/device-management.js';
+import {listManagedDevices,renameManagedDevice,revokeManagedDevice} from '../flows/device-management.js';
 import {getUnlockedPin,loadProfile} from '../local/session.js';
 import type {ManagedDevice,PendingDevice} from '../api/types.js';
 
@@ -48,6 +48,13 @@ export function DeviceManagementScreen(){
     catch(e){setMessage(e instanceof Error?e.message:'Ошибка подтверждения');}
   }
 
+  async function rename(device:ManagedDevice){
+    const next=window.prompt('Новое название устройства',device.deviceName)?.trim();
+    if(!next||next===device.deviceName)return;
+    try{await renameManagedDevice(device.deviceId,next);setMessage('Название устройства обновлено.');await refresh();}
+    catch(e){setMessage(e instanceof Error?e.message:'Ошибка переименования');}
+  }
+
   async function revoke(device:ManagedDevice){
     if(device.current||device.status==='revoked')return;
     if(!window.confirm(`Отозвать устройство «${device.deviceName}»? Оно потеряет доступ к новым сообщениям.`))return;
@@ -68,7 +75,10 @@ export function DeviceManagementScreen(){
         <strong>{device.deviceName}{device.current?' · это устройство':''}</strong>
         <span className={`status-chip status-${device.status}`}>{statusLabel(device.status)}</span>
       </div>
-      {!device.current&&device.status!=='revoked'&&<button className="danger-button" onClick={()=>void revoke(device)}>Отозвать</button>}
+      <div className="member-actions">
+        {device.status!=='revoked'&&<button className="secondary-button" onClick={()=>void rename(device)}>Переименовать</button>}
+        {!device.current&&device.status!=='revoked'&&<button className="danger-button" onClick={()=>void revoke(device)}>Отозвать</button>}
+      </div>
     </div>)}
 
     <h3>Ждут моего подтверждения</h3>
