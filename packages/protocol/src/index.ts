@@ -14,6 +14,8 @@ export const BootstrapFamilyRequest = z.object({
   initialFamilyChatKeyEnvelope: Base64
 });
 
+export const CreateInvitationRequest = z.object({ memberDisplayName: DisplayName.optional() });
+
 export const CreateInvitationResponse = z.object({
   invitationId: Id,
   joinToken: z.string().min(32),
@@ -23,7 +25,7 @@ export const CreateInvitationResponse = z.object({
 export const InvitationTokenRequest = z.object({ joinToken: z.string().min(32) });
 
 export const AcceptInvitationRequest = InvitationTokenRequest.extend({
-  memberDisplayName: DisplayName,
+  memberDisplayName: DisplayName.optional(),
   deviceName: DeviceName,
   encryptionPublicKey: Base64,
   signingPublicKey: Base64
