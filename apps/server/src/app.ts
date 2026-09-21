@@ -1,5 +1,6 @@
 import {registerMemberRoutes} from './members/routes.js';
 import {registerDeviceRoutes} from './devices/routes.js';
+import {registerDeviceEnrollmentRoutes} from './device-enrollment/routes.js';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
@@ -35,6 +36,7 @@ export async function buildApp(options:{skipDatabase?:boolean;pool?:DatabasePool
     await registerMemberRoutes(app,pool,hub);
     await registerFamilyRoutes(app,pool,config.nodeEnv==='production');
     await registerInvitationRoutes(app,pool,config.nodeEnv==='production');
+    await registerDeviceEnrollmentRoutes(app,pool,config.nodeEnv==='production');
     await registerKeyRoutes(app,pool);
     await registerKeyRotationRoutes(app,pool);
     await registerMessageRoutes(app,pool,hub);
