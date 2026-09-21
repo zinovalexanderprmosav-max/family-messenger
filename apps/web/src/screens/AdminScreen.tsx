@@ -30,11 +30,13 @@ export function AdminScreen({family,currentMemberId,onChanged}:{family:FamilySum
   useEffect(()=>{void refresh();const id=setInterval(()=>void refresh(),4000);return()=>clearInterval(id);},[]);
 
   async function createInvite(){
+    const memberDisplayName=window.prompt('Имя нового участника (например, Мама)')?.trim();
+    if(!memberDisplayName)return;
     try{
-      const inv=await api<InvitationResponse>('/v1/invitations',{method:'POST',body:'{}'});
+      const inv=await api<InvitationResponse>('/v1/invitations',{method:'POST',body:JSON.stringify({memberDisplayName})});
       const url=`${location.origin}/#/join?token=${encodeURIComponent(inv.joinToken)}`;
       setJoinUrl(url);setQr(await QRCode.toDataURL(url,{margin:1,width:280}));
-      setMessage('QR действует 15 минут и создаёт нового участника семьи.');
+      setMessage(`QR для «${memberDisplayName}» действует 15 минут. На Android достаточно отсканировать его один раз.`);
     }catch(e){setMessage(e instanceof Error?e.message:'Ошибка');}
   }
 
