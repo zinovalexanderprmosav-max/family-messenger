@@ -18,3 +18,14 @@ export async function loadChatKey(chatId:string,pin:string,keyVersion?:number){
  if(keyVersion===undefined||keyVersion===item.keyVersion)return {keyVersion:item.keyVersion,key:fromBase64(item.key)};
  const historical=item.previous?.[String(keyVersion)];if(!historical)throw new Error('chat_key_not_found');return {keyVersion,key:fromBase64(historical)};
 }
+
+export async function listStoredChatKeys(pin:string){
+ const plain=await unlockDeviceProfile(pin);
+ const items:Array<{chatId:string;keyVersion:number;key:Uint8Array}>=[];
+ for(const [chatId,current] of Object.entries(plain.chatKeys)){
+  for(const [version,key] of Object.entries(current.previous??{}))items.push({chatId,keyVersion:Number(version),key:fromBase64(key)});
+  items.push({chatId,keyVersion:current.keyVersion,key:fromBase64(current.key)});
+ }
+ items.sort((a,b)=>a.chatId.localeCompare(b.chatId)||a.keyVersion-b.keyVersion);
+ return items;
+}

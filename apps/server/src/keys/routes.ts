@@ -4,7 +4,7 @@ import { ApproveDeviceRequest } from '@family-messenger/protocol';
 import type { DatabasePool } from '../db/pool.js';
 import { requireSession } from '../auth/session.js';
 import { requireCsrf } from '../auth/csrf.js';
-import { approveDevice, getCurrentKeyEnvelope, listPendingDevices } from './repository.js';
+import { approveDevice, getCurrentKeyEnvelope, listDeviceKeyEnvelopes, listPendingDevices } from './repository.js';
 import { appendAuditEvent } from '../audit/repository.js';
 
 async function activeRole(pool:DatabasePool,familyId:string,memberId:string){
@@ -35,14 +35,37 @@ export async function registerKeyRoutes(app:FastifyInstance,pool:DatabasePool){
         SELECT member_id FROM devices WHERE id=$1 AND family_id=$2
       `,[request.params.deviceId,p.familyId])).rows[0];
       if(!target)fail('device_not_found',404);
-      if(target.member_id!==p.memberId&&actor.role!=='admin')fail('administrator_required',403);
-      await approveDevice(tx,{familyId:p.familyId,deviceId:request.params.deviceId,...input});
+      const ownDevice=target.member_id===p.memberId;
+      if(!ownDevice&&actor.role!=='admin')fail('administrator_required',403);
+      if(!ownDevice&&(input.provisionedKeys?.length??0)>0)fail('history_provisioning_forbidden',403);
+      const approved=await approveDevice(tx,{
+        familyId:p.familyId,
+        deviceId:request.params.deviceId,
+        actorDeviceId:p.deviceId,
+        chatId:input.chatId,
+        keyVersion:input.keyVersion,
+        sealedKeyEnvelope:input.sealedKeyEnvelope,
+        allowHistorical:ownDevice,
+        ...(input.provisionedKeys!==undefined?{provisionedKeys:input.provisionedKeys}:{})
+      });
       await appendAuditEvent(tx,{
         familyId:p.familyId,actorDeviceId:p.deviceId,eventType:'device.approved',
-        details:{deviceId:request.params.deviceId,chatId:input.chatId,keyVersion:input.keyVersion}
+        details:{
+          deviceId:request.params.deviceId,chatId:input.chatId,keyVersion:input.keyVersion,
+          provisionedKeyCount:approved.provisionedKeyCount
+        }
       });
       await tx.query('COMMIT');return reply.code(204).send();
     }catch(error){await tx.query('ROLLBACK');throw error;}finally{tx.release();}
+  });
+
+  app.get('/v1/keys/device/envelopes',async(request,reply)=>{
+    const p=await requireSession(request,pool);
+    if(p.deviceStatus==='pending_key')return reply.code(404).send({error:'key_envelope_not_ready'});
+    if(p.deviceStatus!=='active')return reply.code(403).send({error:'device_not_active'});
+    const tx=await pool.connect();
+    try{return {items:await listDeviceKeyEnvelopes(tx,{familyId:p.familyId,memberId:p.memberId,deviceId:p.deviceId})};}
+    finally{tx.release();}
   });
 
   app.get<{Params:{chatId:string}}>('/v1/keys/chat/:chatId/current',async(request,reply)=>{
