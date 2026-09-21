@@ -1,4 +1,4 @@
-name: Phase 3C5 CI
+name: Phase 3C6 CI
 
 on:
   push:
@@ -7,12 +7,14 @@ on:
       - feat/phase3c3-own-device-enrollment
       - feat/phase3c4-trusted-key-provisioning
       - feat/phase3c5-device-member-management
+      - feat/phase3c6-e2ee-attachments
   pull_request:
     branches:
       - main
       - feat/phase3c2-removal-revocation
       - feat/phase3c3-own-device-enrollment
       - feat/phase3c4-trusted-key-provisioning
+      - feat/phase3c5-device-member-management
 
 jobs:
   full-project:
