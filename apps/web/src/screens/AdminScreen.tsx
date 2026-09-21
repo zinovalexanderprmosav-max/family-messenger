@@ -17,6 +17,7 @@ export function AdminScreen({family,currentMemberId,onChanged}:{family:FamilySum
   const [devices,setDevices]=useState<ManagedDevice[]>([]);
   const [message,setMessage]=useState('');
   const isPrimary=family.primaryAdminMemberId===currentMemberId;
+  const activeAdminCount=family.members.filter(member=>member.status==='active'&&member.role==='admin').length;
 
   async function refresh(){
     try{
@@ -78,7 +79,7 @@ export function AdminScreen({family,currentMemberId,onChanged}:{family:FamilySum
     <h3>Участники</h3>
     {activeMembers.map(member=>{
       const canRemove=member.id!==family.primaryAdminMemberId&&(isPrimary||member.role==='member');
-      const canPromote=isPrimary&&member.role==='member';
+      const canPromote=isPrimary&&activeAdminCount<2&&member.role==='member';
       const canDemote=isPrimary&&member.role==='admin'&&member.id!==family.primaryAdminMemberId;
       const memberDevices=devices.filter(device=>device.memberId===member.id);
       const canRevokeTarget=member.id!==family.primaryAdminMemberId&&(isPrimary||member.role==='member');
