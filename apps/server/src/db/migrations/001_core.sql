@@ -195,6 +195,13 @@ WHERE f.primary_admin_member_id IS NULL
       AND fm.status='active'
   );
 
+ALTER TABLE invitations ADD COLUMN IF NOT EXISTS intended_member_display_name TEXT;
+DO $ BEGIN
+ ALTER TABLE invitations ADD CONSTRAINT invitations_intended_name_length CHECK (
+  intended_member_display_name IS NULL OR length(intended_member_display_name) BETWEEN 1 AND 80
+ );
+EXCEPTION WHEN duplicate_object THEN NULL; END $;
+
 ALTER TABLE chats ADD COLUMN IF NOT EXISTS write_disabled_at TIMESTAMPTZ;
 ALTER TABLE chats ADD COLUMN IF NOT EXISTS write_disabled_reason TEXT;
 DO $$ BEGIN
