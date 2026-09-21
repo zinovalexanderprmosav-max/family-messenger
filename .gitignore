@@ -8,3 +8,9 @@ test-results/
 .DS_Store
 
 .env.production
+
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/
+*.apk
