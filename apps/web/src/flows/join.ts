@@ -1,8 +1,9 @@
-import { fromBase64, generateDeviceIdentity, openConversationKey, toBase64 } from '@family-messenger/crypto';
+import { generateDeviceIdentity, toBase64 } from '@family-messenger/crypto';
 import { api } from '../api/client.js';
 import type { AcceptResponse } from '../api/types.js';
-import { createLockedDeviceProfile, saveChatKey, unlockDeviceProfile } from '../local/keystore.js';
+import { createLockedDeviceProfile } from '../local/keystore.js';
 import { loadProfile, saveProfile, setUnlockedPin } from '../local/session.js';
+import { syncAllDeviceKeys } from './key-provisioning.js';
 
 export function consumeJoinTokenFromHash(locationLike:Pick<Location,'hash'>=window.location){
   const hash=locationLike.hash;const match=hash.match(/^#\/join\?token=([^&]+)/);if(!match)return null;
@@ -18,9 +19,6 @@ export async function acceptInvitation(input:{joinToken:string;memberDisplayName
 }
 export async function completePendingApproval(pin:string){
   const profile=await loadProfile();if(!profile)throw new Error('profile_not_found');
-  const envelope=await api<{keyVersion:number;sealedKeyEnvelope:string}>(`/v1/keys/chat/${profile.familyChatId}/current`);
-  const plain=await unlockDeviceProfile(pin);
-  const key=await openConversationKey(envelope.sealedKeyEnvelope,fromBase64(plain.encryptionPublicKey),fromBase64(plain.encryptionPrivateKey));
-  await saveChatKey(profile.familyChatId,envelope.keyVersion,key,pin);
+  await syncAllDeviceKeys(pin);
   const active={...profile,status:'active' as const};await saveProfile(active);setUnlockedPin(pin);return active;
 }
