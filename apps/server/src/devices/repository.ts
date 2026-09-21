@@ -52,3 +52,14 @@ export async function listVisibleDevices(tx:PoolClient,p:SessionPrincipal){
   revokedAt:row.revoked_at?.toISOString()??null
  }));
 }
+
+export async function renameOwnDevice(tx:PoolClient,p:SessionPrincipal,deviceId:string,deviceName:string){
+ await lockFamily(tx,p.familyId);await assertActiveActor(tx,p);
+ const target=(await tx.query<{member_id:string}>(`
+  SELECT member_id FROM devices WHERE id=$1 AND family_id=$2 FOR UPDATE
+ `,[deviceId,p.familyId])).rows[0];
+ if(!target)fail('device_not_found',404);
+ if(target.member_id!==p.memberId)fail('device_owner_required',403);
+ await tx.query('UPDATE devices SET device_name=$1 WHERE id=$2',[deviceName,deviceId]);
+ await appendAuditEvent(tx,{familyId:p.familyId,actorDeviceId:p.deviceId,eventType:'device.renamed',details:{deviceId}});
+}
