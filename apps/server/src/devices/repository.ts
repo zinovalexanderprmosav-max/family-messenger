@@ -2,12 +2,16 @@ import type {PoolClient} from 'pg';
 import type {SessionPrincipal} from '../auth/session.js';
 import {appendAuditEvent} from '../audit/repository.js';
 import {assertActiveActor,fail,lockFamily} from '../families/access.js';
+import {requireRotationsForRevokedDevices} from '../key-rotation/repository.js';
+
 export async function revokeDeviceRows(tx:PoolClient,p:SessionPrincipal,deviceIds:string[],source:string){
  const changed=await tx.query<{id:string;member_id:string}>(`UPDATE devices SET status='revoked',revoked_at=now() WHERE family_id=$1 AND id=ANY($2::uuid[]) AND status<>'revoked' RETURNING id,member_id`,[p.familyId,deviceIds]);
+ const changedIds=changed.rows.map(r=>r.id);
  await tx.query('DELETE FROM sessions WHERE device_id=ANY($1::uuid[])',[deviceIds]);
  await tx.query('DELETE FROM auth_challenges WHERE device_id=ANY($1::uuid[])',[deviceIds]);
+ await requireRotationsForRevokedDevices(tx,p,changedIds);
  for(const row of changed.rows)await appendAuditEvent(tx,{familyId:p.familyId,actorDeviceId:p.deviceId,eventType:'device.revoked',details:{deviceId:row.id,memberId:row.member_id,source}});
- return changed.rows.map(r=>r.id);
+ return changedIds;
 }
 export async function revokeDevice(tx:PoolClient,p:SessionPrincipal,deviceId:string){
  const primary=await lockFamily(tx,p.familyId),actor=await assertActiveActor(tx,p);
