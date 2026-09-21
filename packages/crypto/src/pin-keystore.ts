@@ -1,12 +1,18 @@
 import { fromBase64, text, toBase64, utf8 } from './encoding.js';
 import { getSodium } from './sodium.js';
 
+export type StoredChatKey = {
+  keyVersion: number;
+  key: string;
+  previous?: Record<string,string>;
+};
+
 export type PlainKeystore = {
   encryptionPublicKey: string;
   encryptionPrivateKey: string;
   signingPublicKey: string;
   signingPrivateKey: string;
-  chatKeys: Record<string, { keyVersion: number; key: string }>;
+  chatKeys: Record<string, StoredChatKey>;
 };
 
 export type EncryptedKeystoreBlob = {
