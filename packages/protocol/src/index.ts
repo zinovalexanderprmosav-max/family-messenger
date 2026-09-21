@@ -78,6 +78,13 @@ export const CompleteKeyRotationRequestSchema = z.object({
   })).min(1)
 });
 
+export const EncryptedAttachmentSchema = z.object({
+  attachmentId: Id,
+  chatId: Id,
+  nonce: Base64,
+  ciphertext: Base64
+});
+
 export const EncryptedMessageEnvelopeSchema = z.object({
   messageId: Id,
   chatId: Id,
@@ -108,6 +115,7 @@ export const RealtimeEventSchema = z.object({
 export type KeyRotationDevice = z.infer<typeof KeyRotationDeviceSchema>;
 export type KeyRotationStatusResponse = z.infer<typeof KeyRotationStatusResponseSchema>;
 export type CompleteKeyRotationRequest = z.infer<typeof CompleteKeyRotationRequestSchema>;
+export type EncryptedAttachment = z.infer<typeof EncryptedAttachmentSchema>;
 export type EncryptedMessageEnvelope = z.infer<typeof EncryptedMessageEnvelopeSchema>;
 export type StoredMessageEnvelope = z.infer<typeof StoredMessageEnvelopeSchema>;
 export type RealtimeEvent = z.infer<typeof RealtimeEventSchema>;
