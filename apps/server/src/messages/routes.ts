@@ -9,7 +9,7 @@ import { insertMessageEnvelope, listMessageEnvelopesAfter } from './repository.j
 import type { RealtimeHub } from '../realtime/hub.js';
 
 async function authorizeChat(pool:DatabasePool|PoolClient,input:{chatId:string;familyId:string;memberId:string;deviceId:string;keyVersion?:number}){
-  const r=await pool.query<{key_version:number|null;write_disabled_at:Date|null}>(`SELECT c.write_disabled_at,(SELECT max(key_version) FROM conversation_key_versions WHERE chat_id=c.id) key_version FROM chats c JOIN chat_members cm ON cm.chat_id=c.id WHERE c.id=$1 AND c.family_id=$2 AND cm.member_id=$3`,[input.chatId,input.familyId,input.memberId]);
+  const r=await pool.query<{key_version:number|null;write_disabled_at:Date|null}>(`SELECT c.write_disabled_at,(SELECT max(key_version) FROM conversation_key_versions WHERE chat_id=c.id) key_version FROM chats c JOIN chat_members cm ON cm.chat_id=c.id JOIN family_memberships fm ON fm.family_id=c.family_id AND fm.member_id=cm.member_id AND fm.status='active' WHERE c.id=$1 AND c.family_id=$2 AND cm.member_id=$3`,[input.chatId,input.familyId,input.memberId]);
   const row=r.rows[0]; if(!row) return null; if(input.keyVersion!==undefined&&row.key_version!==input.keyVersion) return {allowed:false,currentKeyVersion:row.key_version}; return {allowed:true,currentKeyVersion:row.key_version,readOnly:row.write_disabled_at!==null};
 }
 
@@ -22,6 +22,8 @@ export async function registerMessageRoutes(app:FastifyInstance,pool:DatabasePoo
       await tx.query('BEGIN');await lockFamily(tx,p.familyId);await assertActiveActor(tx,p);
       const auth=await authorizeChat(tx,{chatId:envelope.chatId,familyId:p.familyId,memberId:p.memberId,deviceId:p.deviceId});
       if(!auth)fail('chat_not_found',404);if(auth.readOnly)fail('chat_read_only',409);
+      const pending=await tx.query(`SELECT 1 FROM chat_key_rotations WHERE chat_id=$1 AND status='required' LIMIT 1`,[envelope.chatId]);
+      if(pending.rowCount)fail('key_rotation_required',409);
       if(auth.currentKeyVersion!==envelope.keyVersion){await tx.query('ROLLBACK');return reply.code(409).send({error:'key_version_mismatch',currentKeyVersion:auth.currentKeyVersion});}
       const stored=await insertMessageEnvelope(tx,envelope);await tx.query('COMMIT');hub.publish(p.familyId,{type:'reconcile.required',chatId:envelope.chatId,latestSequence:stored.sequence});return reply.code(stored.inserted?201:200).send({...envelope,sequence:stored.sequence,acceptedAt:stored.acceptedAt});
     }catch(error){await tx.query('ROLLBACK');throw error;}finally{tx.release();}
