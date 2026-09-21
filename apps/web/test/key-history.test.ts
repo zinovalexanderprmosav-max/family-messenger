@@ -10,7 +10,6 @@ it('keeps old conversation keys readable after rotation and never downgrades cur
  await createLockedDeviceProfile(await generateDeviceIdentity(),pin);
  const old=await generateConversationKey(),fresh=await generateConversationKey();
  await saveChatKey('chat',1,old,pin);await saveChatKey('chat',2,fresh,pin);
- // @ts-expect-error RED: version-specific retrieval is not yet implemented
  expect(Array.from((await loadChatKey('chat',pin,1)).key)).toEqual(Array.from(old));
  await saveChatKey('chat',1,old,pin);
  expect((await loadChatKey('chat',pin)).keyVersion).toBe(2);
