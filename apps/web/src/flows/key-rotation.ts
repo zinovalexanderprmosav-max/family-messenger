@@ -5,6 +5,7 @@ import {loadChatKey,saveChatKey,unlockDeviceProfile} from '../local/keystore.js'
 import {rotateChatKeyCore} from './key-rotation-core.js';
 
 function isDeviceSetChanged(error:unknown){return error instanceof Error&&error.message==='device_key_set_changed';}
+function isConcurrentCompletion(error:unknown){return error instanceof Error&&(error.message==='key_rotation_not_required'||error.message==='key_rotation_stale');}
 
 async function rotateOnce(chatId:string,pin:string){
   return rotateChatKeyCore(chatId,{
@@ -17,17 +18,6 @@ async function rotateOnce(chatId:string,pin:string){
   });
 }
 
-export async function rotateChatKey(chatId:string,pin:string):Promise<{keyVersion:number}>{
-  try{
-    const result=await rotateOnce(chatId,pin);
-    return {keyVersion:result.keyVersion};
-  }catch(error){
-    if(!isDeviceSetChanged(error))throw error;
-    const result=await rotateOnce(chatId,pin);
-    return {keyVersion:result.keyVersion};
-  }
-}
-
 export async function syncCurrentChatKey(chatId:string,pin:string){
   const envelope=await api<{keyVersion:number;sealedKeyEnvelope:string}>(`/v1/keys/chat/${chatId}/current`);
   const existing=await loadChatKey(chatId,pin).catch(()=>null);
@@ -36,4 +26,21 @@ export async function syncCurrentChatKey(chatId:string,pin:string){
   const key=await openConversationKey(envelope.sealedKeyEnvelope,fromBase64(plain.encryptionPublicKey),fromBase64(plain.encryptionPrivateKey));
   await saveChatKey(chatId,envelope.keyVersion,key,pin);
   return {keyVersion:envelope.keyVersion,key};
+}
+
+async function finishRotationResult(chatId:string,pin:string,result:Awaited<ReturnType<typeof rotateOnce>>){
+  if(result.rotated)return {keyVersion:result.keyVersion};
+  const current=await syncCurrentChatKey(chatId,pin);
+  return {keyVersion:current.keyVersion};
+}
+
+export async function rotateChatKey(chatId:string,pin:string):Promise<{keyVersion:number}>{
+  try{
+    return await finishRotationResult(chatId,pin,await rotateOnce(chatId,pin));
+  }catch(error){
+    if(isConcurrentCompletion(error))return {keyVersion:(await syncCurrentChatKey(chatId,pin)).keyVersion};
+    if(!isDeviceSetChanged(error))throw error;
+    try{return await finishRotationResult(chatId,pin,await rotateOnce(chatId,pin));}
+    catch(second){if(isConcurrentCompletion(second))return {keyVersion:(await syncCurrentChatKey(chatId,pin)).keyVersion};throw second;}
+  }
 }
