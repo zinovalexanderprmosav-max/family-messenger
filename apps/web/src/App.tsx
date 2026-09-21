@@ -14,7 +14,7 @@ import { DeviceManagementScreen } from './screens/DeviceManagementScreen.js';
 import { FamilyContacts,type FamilyContact } from './components/FamilyContacts.js';
 import type { LocalProfile } from './local/db.js';
 
-type FamilySummary={members:FamilyContact[]};
+type FamilySummary={primaryAdminMemberId:string|null;members:FamilyContact[]};
 
 export default function App(){
   const [profile,setProfile]=useState<LocalProfile|null|undefined>(undefined);
@@ -22,6 +22,7 @@ export default function App(){
   const [role,setRole]=useState<'admin'|'member'|null>(null);
   const [selectedMember,setSelectedMember]=useState<FamilyContact|null>(null);
   const [mode,setMode]=useState<'home'|'create'>('home');
+  const [familyRefresh,setFamilyRefresh]=useState(0);
   const [joinToken]=useState(()=>consumeJoinTokenFromHash());
   const [deviceToken]=useState(()=>consumeDeviceEnrollmentTokenFromHash());
   const refresh=()=>void loadProfile().then(setProfile);
@@ -34,9 +35,10 @@ export default function App(){
       if(cancelled)return;
       setFamily(summary);
       setRole(summary.members.find(member=>member.id===profile.memberId)?.role??'member');
+      if(selectedMember&&!summary.members.some(member=>member.id===selectedMember.id&&member.status==='active'))setSelectedMember(null);
     }).catch(()=>{if(!cancelled){setFamily(null);setRole('member');}});
     return()=>{cancelled=true;};
-  },[profile]);
+  },[profile,familyRefresh]);
 
   if(profile===undefined)return <main className="center-card">Загрузка…</main>;
   if(!profile&&joinToken)return <JoinFamilyScreen token={joinToken} onDone={refresh}/>;
@@ -49,7 +51,7 @@ export default function App(){
     <div className="side-stack">
       {family&&<FamilyContacts members={family.members} currentMemberId={profile.memberId} selectedMemberId={selectedMember?.id??null} onSelectMember={setSelectedMember}/>}
       <DeviceManagementScreen/>
-      {role==='admin'&&<AdminScreen/>}
+      {role==='admin'&&family&&<AdminScreen family={family} currentMemberId={profile.memberId} onChanged={()=>setFamilyRefresh(value=>value+1)}/>}
     </div>
   </div>;
 }
