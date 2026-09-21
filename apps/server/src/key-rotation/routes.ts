@@ -1,5 +1,6 @@
 import type {FastifyInstance} from 'fastify';
 import {z} from 'zod';
+import type {PoolClient} from 'pg';
 import type {DatabasePool} from '../db/pool.js';
 import {requireSession} from '../auth/session.js';
 import {requireCsrf} from '../auth/csrf.js';
@@ -21,7 +22,7 @@ type RotationRow={
 };
 
 async function authorizeRotationChat(
-  tx:Awaited<ReturnType<DatabasePool['connect']>>,
+  tx:PoolClient,
   input:{chatId:string;familyId:string;memberId:string;deviceId:string}
 ){
   const chat=(await tx.query<{write_disabled_at:Date|null}>(`
@@ -36,7 +37,7 @@ async function authorizeRotationChat(
 }
 
 async function requiredDevices(
-  tx:Awaited<ReturnType<DatabasePool['connect']>>,
+  tx:PoolClient,
   input:{chatId:string;familyId:string}
 ){
   const rows=await tx.query<{device_id:string;member_id:string;encryption_public_key:string}>(`
@@ -57,7 +58,7 @@ async function requiredDevices(
 }
 
 async function assertTrustedActor(
-  tx:Awaited<ReturnType<DatabasePool['connect']>>,
+  tx:PoolClient,
   input:{chatId:string;deviceId:string;fromKeyVersion:number}
 ){
   const trusted=await tx.query(`
