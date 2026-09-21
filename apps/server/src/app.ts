@@ -12,6 +12,7 @@ import { registerDeviceAuthRoutes } from './auth/device-auth.js';
 import { registerFamilyRoutes } from './families/routes.js';
 import { registerInvitationRoutes } from './invitations/routes.js';
 import { registerKeyRoutes } from './keys/routes.js';
+import { registerKeyRotationRoutes } from './key-rotation/routes.js';
 import { registerMessageRoutes } from './messages/routes.js';
 import { registerDirectChatRoutes } from './direct-chats/routes.js';
 import { RealtimeHub } from './realtime/hub.js';
@@ -35,6 +36,7 @@ export async function buildApp(options:{skipDatabase?:boolean;pool?:DatabasePool
     await registerFamilyRoutes(app,pool,config.nodeEnv==='production');
     await registerInvitationRoutes(app,pool,config.nodeEnv==='production');
     await registerKeyRoutes(app,pool);
+    await registerKeyRotationRoutes(app,pool);
     await registerMessageRoutes(app,pool,hub);
     await registerDirectChatRoutes(app,pool);
     await registerRealtimeRoutes(app,pool,hub);
