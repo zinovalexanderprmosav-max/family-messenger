@@ -35,6 +35,32 @@ export const ApproveDeviceRequest = z.object({
   sealedKeyEnvelope: Base64
 });
 
+export const KeyRotationDeviceSchema = z.object({
+  deviceId: Id,
+  memberId: Id,
+  encryptionPublicKey: Base64
+});
+
+export const KeyRotationStatusResponseSchema = z.union([
+  z.object({status:z.literal('not_required')}),
+  z.object({
+    status:z.literal('required'),
+    chatId:Id,
+    fromKeyVersion:z.number().int().positive(),
+    nextKeyVersion:z.number().int().positive(),
+    devices:z.array(KeyRotationDeviceSchema).min(1)
+  })
+]);
+
+export const CompleteKeyRotationRequestSchema = z.object({
+  fromKeyVersion:z.number().int().positive(),
+  nextKeyVersion:z.number().int().positive(),
+  envelopes:z.array(z.object({
+    deviceId:Id,
+    sealedKeyEnvelope:Base64
+  })).min(1)
+});
+
 export const EncryptedMessageEnvelopeSchema = z.object({
   messageId: Id,
   chatId: Id,
@@ -62,6 +88,9 @@ export const RealtimeEventSchema = z.object({
   latestSequence: z.string().regex(/^\d+$/)
 });
 
+export type KeyRotationDevice = z.infer<typeof KeyRotationDeviceSchema>;
+export type KeyRotationStatusResponse = z.infer<typeof KeyRotationStatusResponseSchema>;
+export type CompleteKeyRotationRequest = z.infer<typeof CompleteKeyRotationRequestSchema>;
 export type EncryptedMessageEnvelope = z.infer<typeof EncryptedMessageEnvelopeSchema>;
 export type StoredMessageEnvelope = z.infer<typeof StoredMessageEnvelopeSchema>;
 export type RealtimeEvent = z.infer<typeof RealtimeEventSchema>;
