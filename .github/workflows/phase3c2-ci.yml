@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feat/phase3c2-removal-revocation
+  pull_request:
+    branches:
+      - main
 
 jobs:
   full-project:
