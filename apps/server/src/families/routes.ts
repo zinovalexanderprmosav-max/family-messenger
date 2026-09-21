@@ -1,3 +1,4 @@
+import {lockFamily,assertActiveActor} from '../families/access.js';
 import type { FastifyInstance } from 'fastify';
 import { BootstrapFamilyRequest } from '@family-messenger/protocol';
 import type { DatabasePool } from '../db/pool.js';
@@ -76,6 +77,7 @@ export async function registerFamilyRoutes(app:FastifyInstance,pool:DatabasePool
     const tx=await pool.connect();
     try{
       await tx.query('BEGIN');
+      await lockFamily(tx,principal.familyId);await assertActiveActor(tx,principal);
       await assertPrimaryAdministrator(tx,principal);
       if(request.params.memberId===principal.memberId) throw Object.assign(new Error('primary_administrator_protected'),{statusCode:409});
       await promoteAdministrator(tx,principal.familyId,request.params.memberId);
@@ -94,6 +96,7 @@ export async function registerFamilyRoutes(app:FastifyInstance,pool:DatabasePool
     const tx=await pool.connect();
     try{
       await tx.query('BEGIN');
+      await lockFamily(tx,principal.familyId);await assertActiveActor(tx,principal);
       await assertPrimaryAdministrator(tx,principal);
       if(request.params.memberId===principal.memberId) throw Object.assign(new Error('primary_administrator_protected'),{statusCode:409});
       await demoteAdministrator(tx,principal.familyId,request.params.memberId);

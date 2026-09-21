@@ -1,3 +1,4 @@
+import {assertActiveActor,lockFamily} from '../families/access.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { DatabasePool } from '../db/pool.js';
@@ -32,10 +33,10 @@ export async function registerDirectChatRoutes(app:FastifyInstance,pool:Database
     if(principal.deviceStatus!=='active') return reply.code(403).send({error:'device_not_active'});
     const memberIds=[principal.memberId,request.params.memberId];
     const members=await activePair(pool,principal.familyId,memberIds);
-    if(members.rowCount!==2) return reply.code(404).send({error:'member_not_found'});
 
-    const existing=await pool.query<{id:string;key_version:number}>(`
-      SELECT c.id,(SELECT max(key_version)::int FROM conversation_key_versions WHERE chat_id=c.id) key_version
+
+    const existing=await pool.query<{id:string;key_version:number;write_disabled_at:Date|null}>(`
+      SELECT c.id,c.write_disabled_at,(SELECT max(key_version)::int FROM conversation_key_versions WHERE chat_id=c.id) key_version
       FROM chats c
       WHERE c.family_id=$1 AND c.kind='direct'
         AND (SELECT count(*) FROM chat_members cm WHERE cm.chat_id=c.id)=2
@@ -51,9 +52,10 @@ export async function registerDirectChatRoutes(app:FastifyInstance,pool:Database
         LIMIT 1
       `,[existing.rows[0].id,existing.rows[0].key_version,principal.deviceId]);
       if(!envelope.rows[0]) return reply.code(409).send({error:'chat_key_envelope_not_found'});
-      return {status:'ready' as const,chatId:existing.rows[0].id,keyVersion:existing.rows[0].key_version,sealedKeyEnvelope:envelope.rows[0].sealed_key_envelope};
+      return {status:'ready' as const,readOnly:existing.rows[0].write_disabled_at!==null,chatId:existing.rows[0].id,keyVersion:existing.rows[0].key_version,sealedKeyEnvelope:envelope.rows[0].sealed_key_envelope};
     }
 
+    if(members.rowCount!==2) return reply.code(404).send({error:'member_not_found'});
     const devices=await activeDevices(pool,principal.familyId,memberIds);
     return {
       status:'needs_key' as const,
@@ -70,15 +72,15 @@ export async function registerDirectChatRoutes(app:FastifyInstance,pool:Database
     const tx=await pool.connect();
     try{
       await tx.query('BEGIN');
-      await tx.query(`SELECT id FROM families WHERE id=$1 FOR UPDATE`,[principal.familyId]);
+      await lockFamily(tx,principal.familyId);await assertActiveActor(tx,principal);
       const members=await tx.query<{member_id:string}>(`
         SELECT member_id FROM family_memberships
         WHERE family_id=$1 AND member_id=ANY($2::uuid[]) AND status='active'
       `,[principal.familyId,memberIds]);
       if(members.rowCount!==2) throw Object.assign(new Error('member_not_found'),{statusCode:404});
 
-      const existing=await tx.query<{id:string;key_version:number}>(`
-        SELECT c.id,(SELECT max(key_version)::int FROM conversation_key_versions WHERE chat_id=c.id) key_version
+      const existing=await tx.query<{id:string;key_version:number;write_disabled_at:Date|null}>(`
+        SELECT c.id,c.write_disabled_at,(SELECT max(key_version)::int FROM conversation_key_versions WHERE chat_id=c.id) key_version
         FROM chats c
         WHERE c.family_id=$1 AND c.kind='direct'
           AND (SELECT count(*) FROM chat_members cm WHERE cm.chat_id=c.id)=2

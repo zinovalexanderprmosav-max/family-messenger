@@ -154,4 +154,12 @@ WHERE f.primary_admin_member_id IS NULL
       AND fm.status='active'
   );
 
+ALTER TABLE chats ADD COLUMN IF NOT EXISTS write_disabled_at TIMESTAMPTZ;
+ALTER TABLE chats ADD COLUMN IF NOT EXISTS write_disabled_reason TEXT;
+DO $$ BEGIN
+ ALTER TABLE chats ADD CONSTRAINT chats_write_state CHECK (
+  (write_disabled_at IS NULL AND write_disabled_reason IS NULL) OR
+  (write_disabled_at IS NOT NULL AND write_disabled_reason='member_removed')
+ );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 COMMIT;

@@ -1,3 +1,4 @@
+import {lockFamily,assertActiveActor} from '../families/access.js';
 import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { AcceptInvitationRequest, InvitationTokenRequest } from '@family-messenger/protocol';
@@ -22,6 +23,7 @@ export async function registerInvitationRoutes(app:FastifyInstance,pool:Database
     const tx=await pool.connect();
     try{
       await tx.query('BEGIN');
+      await lockFamily(tx,principal.familyId);await assertActiveActor(tx,principal);
       const admin=await tx.query(`SELECT 1 FROM family_memberships WHERE family_id=$1 AND member_id=$2 AND role='admin' AND status='active'`,[principal.familyId,principal.memberId]);
       if(!admin.rowCount){await tx.query('ROLLBACK');return reply.code(403).send({error:'administrator_required'});}
       const joinToken=randomBytes(32).toString('base64url'); const expiresAt=new Date(Date.now()+15*60*1000);

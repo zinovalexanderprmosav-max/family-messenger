@@ -1,3 +1,4 @@
+import {registerMemberRoutes} from './members/routes.js';
 import {registerDeviceRoutes} from './devices/routes.js';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
@@ -30,6 +31,7 @@ export async function buildApp(options:{skipDatabase?:boolean;pool?:DatabasePool
     const hub=new RealtimeHub();
     await registerDeviceAuthRoutes(app,pool,config.nodeEnv==='production');
     await registerDeviceRoutes(app,pool,hub);
+    await registerMemberRoutes(app,pool,hub);
     await registerFamilyRoutes(app,pool,config.nodeEnv==='production');
     await registerInvitationRoutes(app,pool,config.nodeEnv==='production');
     await registerKeyRoutes(app,pool);
