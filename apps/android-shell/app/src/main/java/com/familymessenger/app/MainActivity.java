@@ -8,11 +8,13 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -25,6 +27,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.security.SecureRandom;
+
 import com.google.mlkit.vision.barcode.common.Barcode;
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanner;
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
@@ -34,6 +38,7 @@ public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1001;
     private static final String PREFS = "family_messenger";
     private static final String PREF_SERVER_URL = "server_url";
+    private static final String PREF_AUTO_PIN = "auto_pin";
 
     private WebView webView;
     private LinearLayout onboarding;
@@ -160,6 +165,8 @@ public final class MainActivity extends Activity {
         settings.setAllowContentAccess(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+
+        webView.addJavascriptInterface(new NativeBridge(), "FamilyMessengerNative");
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
@@ -387,6 +394,30 @@ public final class MainActivity extends Activity {
             webView.destroy();
         }
         super.onDestroy();
+    }
+
+    private String getOrCreateAutoPin() {
+        String existing = preferences.getString(PREF_AUTO_PIN, "");
+        if (existing != null && existing.matches("\\d{18,}")) return existing;
+        SecureRandom random = new SecureRandom();
+        StringBuilder value = new StringBuilder();
+        for (int i = 0; i < 24; i++) value.append(random.nextInt(10));
+        String generated = value.toString();
+        preferences.edit().putString(PREF_AUTO_PIN, generated).apply();
+        return generated;
+    }
+
+    private final class NativeBridge {
+        @JavascriptInterface
+        public String getAutoPin() {
+            return getOrCreateAutoPin();
+        }
+
+        @JavascriptInterface
+        public String getDeviceName() {
+            String model = Build.MODEL == null ? "" : Build.MODEL.trim();
+            return model.isEmpty() ? "Android телефон" : model;
+        }
     }
 
     private int dp(int value) {
