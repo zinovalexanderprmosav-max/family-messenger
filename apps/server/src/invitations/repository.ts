@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import { assertDeviceCapacity } from '../families/repository.js';
+import { lockFamily } from '../families/access.js';
 
 export type InvitationRecord={id:string;familyId:string;expiresAt:string;consumedAt:string|null;revokedAt:string|null};
 
@@ -18,6 +19,9 @@ export async function inspectInvitation(tx:PoolClient,tokenHash:string){
 }
 
 export async function consumeInvitation(tx:PoolClient,tokenHash:string,deviceInput:{memberDisplayName:string;deviceName:string;encryptionPublicKey:string;signingPublicKey:string}){
+  const family=(await tx.query<{family_id:string}>(`SELECT family_id FROM invitations WHERE token_hash=$1`,[tokenHash])).rows[0];
+  if(!family) throw new Error('invitation_invalid');
+  await lockFamily(tx,family.family_id);
   const r=await tx.query<{id:string;family_id:string;expires_at:Date;consumed_at:Date|null;revoked_at:Date|null}>(`SELECT id,family_id,expires_at,consumed_at,revoked_at FROM invitations WHERE token_hash=$1 FOR UPDATE`,[tokenHash]);
   const invite=r.rows[0]; if(!invite) throw new Error('invitation_invalid');
   if(invite.revoked_at) throw new Error('invitation_revoked');
