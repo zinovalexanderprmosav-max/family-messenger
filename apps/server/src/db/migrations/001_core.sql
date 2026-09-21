@@ -122,6 +122,17 @@ CREATE TABLE IF NOT EXISTS message_envelopes (
 CREATE UNIQUE INDEX IF NOT EXISTS message_id_idempotency ON message_envelopes(message_id);
 CREATE INDEX IF NOT EXISTS message_reconcile_cursor ON message_envelopes(chat_id,sequence);
 
+CREATE TABLE IF NOT EXISTS message_attachments (
+  attachment_id UUID PRIMARY KEY,
+  chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  uploader_device_id UUID NOT NULL REFERENCES devices(id),
+  nonce TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  ciphertext_bytes INTEGER NOT NULL CHECK(ciphertext_bytes > 0 AND ciphertext_bytes <= 26214400),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS message_attachments_chat ON message_attachments(chat_id,created_at);
+
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
   device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
