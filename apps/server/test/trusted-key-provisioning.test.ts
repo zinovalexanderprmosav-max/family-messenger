@@ -23,7 +23,7 @@ async function setup(){
   await pool.query(`INSERT INTO chat_members(chat_id,member_id) VALUES($1,$2),($1,$3)`,[foreignChat,f.other.id,f.primary.id]);
   await pool.query(`INSERT INTO conversation_key_versions(chat_id,key_version) VALUES($1,1),($1,2),($2,1),($3,1)`,[familyChat,directChat,foreignChat]);
   for(const device of [f.primary.device,f.secondary.device,f.member.device,f.other.device]){
-    await pool.query(`INSERT INTO device_key_envelopes(chat_id,key_version,device_id,sealed_key_envelope) VALUES($1,1,$3,'f1-'||$3),($1,2,$3,'f2-'||$3)`,[familyChat,2,device]);
+    await pool.query(`INSERT INTO device_key_envelopes(chat_id,key_version,device_id,sealed_key_envelope) VALUES($1,1,$2,$3),($1,2,$2,$4)`,[familyChat,device,`f1-${device}`,`f2-${device}`]);
   }
   await pool.query(`INSERT INTO device_key_envelopes(chat_id,key_version,device_id,sealed_key_envelope) VALUES($1,1,$2,'direct-member'),($1,1,$3,'direct-primary')`,[directChat,f.member.device,f.primary.device]);
   await pool.query(`INSERT INTO device_key_envelopes(chat_id,key_version,device_id,sealed_key_envelope) VALUES($1,1,$2,'foreign-primary')`,[foreignChat,f.primary.device]);
