@@ -50,7 +50,7 @@ async function sendTextOnce(text:string,pin:string,targetChatId:string,deviceId:
     payload:{kind:'text',text,sentAt:new Date().toISOString()}
   });
   const stored=await api<StoredMessageEnvelope>(`/v1/chats/${targetChatId}/messages`,{method:'POST',body:JSON.stringify(envelope)});
-  await persist([stored]);return visibleFromEnvelope(stored,pin);
+  await persist([stored]);const visible=await visibleFromEnvelope(stored,pin);if(visible.kind!=='text')throw new Error('invalid_message_payload');return visible;
 }
 
 export async function sendTextMessage(text:string,pin:string,chatId?:string){
@@ -87,7 +87,7 @@ async function sendAttachmentReferenceOnce(input:{
   const stored=await api<StoredMessageEnvelope>(`/v1/chats/${input.targetChatId}/messages`,{
     method:'POST',body:JSON.stringify(envelope)
   });
-  await persist([stored]);return visibleFromEnvelope(stored,input.pin);
+  await persist([stored]);const visible=await visibleFromEnvelope(stored,input.pin);if(visible.kind!=='attachment')throw new Error('invalid_message_payload');return visible;
 }
 
 export async function sendAttachmentMessage(file:File,pin:string,chatId?:string){
