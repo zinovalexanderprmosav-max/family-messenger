@@ -9,11 +9,15 @@ export async function savePlainKeystore(plain:PlainKeystore,pin:string){
   const db=await getDb();
   await db.put('keystore',{id:'device',blob});
   saveKeystoreShadow(blob);
+  try{
+    const recovery=await import('../flows/recovery-backup.js');
+    await recovery.syncRecoveryBackupBlob(blob);
+  }catch{}
 }
 
 export async function createLockedDeviceProfile(identity:DeviceIdentity,pin:string){await savePlainKeystore(identityToPlain(identity),pin);}
 
-async function loadEncryptedKeystore(){
+export async function loadEncryptedKeystoreBlob(){
   const db=await getDb();
   const row=await db.get('keystore','device');
   if(row){
@@ -37,7 +41,7 @@ export async function hasLocalEncryptedKeystore(){
 }
 
 export async function unlockDeviceProfile(pin:string){
-  const blob=await loadEncryptedKeystore();
+  const blob=await loadEncryptedKeystoreBlob();
   if(!blob)throw new Error('keystore_not_found');
   return decryptKeystore(blob,pin);
 }
@@ -65,4 +69,10 @@ export async function listStoredChatKeys(pin:string){
  }
  items.sort((a,b)=>a.chatId.localeCompare(b.chatId)||a.keyVersion-b.keyVersion);
  return items;
+}
+
+export async function saveEncryptedKeystoreBlob(blob:EncryptedKeystoreBlob){
+  const db=await getDb();
+  await db.put('keystore',{id:'device',blob});
+  saveKeystoreShadow(blob);
 }
