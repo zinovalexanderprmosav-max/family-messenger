@@ -6,9 +6,10 @@ const MAX_SOURCE_BYTES=20*1024*1024;
 const IMAGE_COMPRESS_THRESHOLD=2*1024*1024;
 const IMAGE_MAX_EDGE=1600;
 
-function mediaKind(mimeType:string):'image'|'video'|'file'{
+function mediaKind(mimeType:string):'image'|'video'|'audio'|'file'{
   if(mimeType.startsWith('image/'))return 'image';
   if(mimeType.startsWith('video/'))return 'video';
+  if(mimeType.startsWith('audio/'))return 'audio';
   return 'file';
 }
 
