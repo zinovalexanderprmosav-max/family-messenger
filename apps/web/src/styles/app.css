@@ -184,3 +184,8 @@ h3{font-size:1rem;margin-top:24px}
 }
 @media(min-width:851px){.install-hint{display:none}}
 @media(display-mode:standalone){.install-hint{display:none!important}}
+
+.welcome-create-secondary{margin-top:10px;width:100%;font-weight:800}
+.recovery-warning{display:grid;gap:7px;margin:18px 0;padding:15px 16px;border-radius:18px;background:var(--warning-soft);color:var(--warning);border:1px solid color-mix(in srgb,var(--warning) 20%,var(--line))}
+.recovery-warning strong{font-size:.92rem}.recovery-warning span{font-size:.82rem;line-height:1.5}
+.recovery-card .form{margin-top:20px}
