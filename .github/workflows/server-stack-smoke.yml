@@ -1,0 +1,39 @@
+name: Permanent Server Stack Smoke
+
+on:
+  push:
+    branches:
+      - release/0.3.8-rc1
+
+jobs:
+  server-stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare server environment
+        run: |
+          cat > .env.server <<'EOF'
+          PUBLIC_HOST=family.example.com
+          POSTGRES_PASSWORD=family-server-smoke-only
+          EOF
+      - name: Validate compose
+        run: docker compose --env-file .env.server -f docker-compose.server.yml config >/dev/null
+      - name: Start database and application
+        run: docker compose --env-file .env.server -f docker-compose.server.yml up -d --build db app
+      - name: Verify application health inside permanent stack
+        run: |
+          for i in $(seq 1 60); do
+            if docker compose --env-file .env.server -f docker-compose.server.yml exec -T app               wget -qO- http://127.0.0.1:10000/health 2>/dev/null | grep -q '"status":"ok"'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose --env-file .env.server -f docker-compose.server.yml logs app db
+          exit 1
+      - name: Verify restart policy
+        run: |
+          test "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' family-messenger-app-1)" = "unless-stopped"
+          test "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' family-messenger-db-1)" = "unless-stopped"
+      - name: Stop stack
+        if: always()
+        run: docker compose --env-file .env.server -f docker-compose.server.yml down -v
