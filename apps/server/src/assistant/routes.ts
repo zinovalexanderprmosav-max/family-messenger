@@ -5,17 +5,14 @@ import {requireSession} from '../auth/session.js';
 import {requireCsrf} from '../auth/csrf.js';
 import type {AppConfig} from '../config.js';
 
-const ProviderSchema=z.enum(['auto','ollama','openrouter']);
 const MessageSchema=z.object({
   role:z.enum(['user','assistant']),
   content:z.string().trim().min(1).max(8000)
 });
 const ChatRequestSchema=z.object({
-  provider:ProviderSchema.default('auto'),
+  provider:z.enum(['auto','openrouter']).optional(),
   messages:z.array(MessageSchema).min(1).max(30)
 });
-
-type Provider='ollama'|'openrouter';
 type ChatMessage=z.infer<typeof MessageSchema>;
 
 const SYSTEM_PROMPT=[
@@ -28,26 +25,6 @@ const SYSTEM_PROMPT=[
 
 function withSystem(messages:ChatMessage[]){
   return [{role:'system' as const,content:SYSTEM_PROMPT},...messages];
-}
-
-async function callOllama(config:AppConfig,messages:ChatMessage[]){
-  if(!config.ollamaBaseUrl)throw new Error('ollama_not_configured');
-  const endpoint=new URL('/api/chat',config.ollamaBaseUrl).toString();
-  const response=await fetch(endpoint,{
-    method:'POST',
-    headers:{'content-type':'application/json'},
-    body:JSON.stringify({
-      model:config.ollamaModel,
-      stream:false,
-      messages:withSystem(messages)
-    }),
-    signal:AbortSignal.timeout(60000)
-  });
-  if(!response.ok)throw new Error('ollama_unavailable');
-  const payload=await response.json() as {message?:{content?:string};model?:string};
-  const content=payload.message?.content?.trim();
-  if(!content)throw new Error('ollama_empty_response');
-  return {provider:'ollama' as const,model:payload.model??config.ollamaModel,content};
 }
 
 async function callOpenRouter(config:AppConfig,messages:ChatMessage[]){
@@ -69,10 +46,9 @@ async function callOpenRouter(config:AppConfig,messages:ChatMessage[]){
     signal:AbortSignal.timeout(60000)
   });
   if(!response.ok){
-    const body=await response.text().catch(()=>'');
     if(response.status===401||response.status===403)throw new Error('openrouter_auth_failed');
     if(response.status===429)throw new Error('openrouter_rate_limited');
-    throw new Error(body?'openrouter_unavailable':'openrouter_unavailable');
+    throw new Error('openrouter_unavailable');
   }
   const payload=await response.json() as {
     model?:string;
@@ -83,14 +59,9 @@ async function callOpenRouter(config:AppConfig,messages:ChatMessage[]){
   return {provider:'openrouter' as const,model:payload.model??config.openRouterModel,content};
 }
 
-async function callProvider(provider:Provider,config:AppConfig,messages:ChatMessage[]){
-  return provider==='ollama'?callOllama(config,messages):callOpenRouter(config,messages);
-}
-
 function publicAssistantError(error:unknown){
   const code=error instanceof Error?error.message:'assistant_unavailable';
   const allowed=new Set([
-    'assistant_not_configured','ollama_not_configured','ollama_unavailable','ollama_empty_response',
     'openrouter_not_configured','openrouter_auth_failed','openrouter_rate_limited',
     'openrouter_unavailable','openrouter_empty_response'
   ]);
@@ -103,7 +74,6 @@ export async function registerAssistantRoutes(app:FastifyInstance,pool:DatabaseP
     if(principal.deviceStatus!=='active')throw Object.assign(new Error('device_not_active'),{statusCode:403});
     return {
       providers:{
-        ollama:{configured:Boolean(config.ollamaBaseUrl),model:config.ollamaModel},
         openrouter:{configured:Boolean(config.openRouterApiKey),model:config.openRouterModel}
       }
     };
@@ -114,21 +84,8 @@ export async function registerAssistantRoutes(app:FastifyInstance,pool:DatabaseP
     requireCsrf(request,principal);
     if(principal.deviceStatus!=='active')return reply.code(403).send({error:'device_not_active'});
     const input=ChatRequestSchema.parse(request.body);
-
     try{
-      if(input.provider==='ollama')return await callOllama(config,input.messages);
-      if(input.provider==='openrouter')return await callOpenRouter(config,input.messages);
-
-      const errors:string[]=[];
-      if(config.ollamaBaseUrl){
-        try{return await callProvider('ollama',config,input.messages);}
-        catch(error){errors.push(publicAssistantError(error));}
-      }
-      if(config.openRouterApiKey){
-        try{return await callProvider('openrouter',config,input.messages);}
-        catch(error){errors.push(publicAssistantError(error));}
-      }
-      return reply.code(503).send({error:errors.at(-1)??'assistant_not_configured'});
+      return await callOpenRouter(config,input.messages);
     }catch(error){
       return reply.code(503).send({error:publicAssistantError(error)});
     }
