@@ -87,6 +87,16 @@ async function callProvider(provider:Provider,config:AppConfig,messages:ChatMess
   return provider==='ollama'?callOllama(config,messages):callOpenRouter(config,messages);
 }
 
+function publicAssistantError(error:unknown){
+  const code=error instanceof Error?error.message:'assistant_unavailable';
+  const allowed=new Set([
+    'assistant_not_configured','ollama_not_configured','ollama_unavailable','ollama_empty_response',
+    'openrouter_not_configured','openrouter_auth_failed','openrouter_rate_limited',
+    'openrouter_unavailable','openrouter_empty_response'
+  ]);
+  return allowed.has(code)?code:'assistant_unavailable';
+}
+
 export async function registerAssistantRoutes(app:FastifyInstance,pool:DatabasePool,config:AppConfig){
   app.get('/v1/assistant/status',async request=>{
     const principal=await requireSession(request,pool);
@@ -99,25 +109,28 @@ export async function registerAssistantRoutes(app:FastifyInstance,pool:DatabaseP
     };
   });
 
-  app.post('/v1/assistant/chat',async request=>{
+  app.post('/v1/assistant/chat',async(request,reply)=>{
     const principal=await requireSession(request,pool);
     requireCsrf(request,principal);
-    if(principal.deviceStatus!=='active')throw Object.assign(new Error('device_not_active'),{statusCode:403});
+    if(principal.deviceStatus!=='active')return reply.code(403).send({error:'device_not_active'});
     const input=ChatRequestSchema.parse(request.body);
 
-    if(input.provider==='ollama')return callOllama(config,input.messages);
-    if(input.provider==='openrouter')return callOpenRouter(config,input.messages);
+    try{
+      if(input.provider==='ollama')return await callOllama(config,input.messages);
+      if(input.provider==='openrouter')return await callOpenRouter(config,input.messages);
 
-    const errors:string[]=[];
-    if(config.ollamaBaseUrl){
-      try{return await callProvider('ollama',config,input.messages);}
-      catch(error){errors.push(error instanceof Error?error.message:'ollama_unavailable');}
+      const errors:string[]=[];
+      if(config.ollamaBaseUrl){
+        try{return await callProvider('ollama',config,input.messages);}
+        catch(error){errors.push(publicAssistantError(error));}
+      }
+      if(config.openRouterApiKey){
+        try{return await callProvider('openrouter',config,input.messages);}
+        catch(error){errors.push(publicAssistantError(error));}
+      }
+      return reply.code(503).send({error:errors.at(-1)??'assistant_not_configured'});
+    }catch(error){
+      return reply.code(503).send({error:publicAssistantError(error)});
     }
-    if(config.openRouterApiKey){
-      try{return await callProvider('openrouter',config,input.messages);}
-      catch(error){errors.push(error instanceof Error?error.message:'openrouter_unavailable');}
-    }
-    const code=errors.at(-1)??'assistant_not_configured';
-    throw Object.assign(new Error(code),{statusCode:503});
   });
 }
