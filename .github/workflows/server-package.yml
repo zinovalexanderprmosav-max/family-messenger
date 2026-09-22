@@ -1,0 +1,40 @@
+name: Server 24x7 Package
+
+on:
+  push:
+    branches:
+      - release/0.3.8-rc1
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build server deployment package
+        run: |
+          mkdir -p artifacts/server-24x7
+          cp docker-compose.server.yml artifacts/server-24x7/
+          cp Server.Caddyfile artifacts/server-24x7/
+          cp .env.server.example artifacts/server-24x7/
+          cp Install-Server.sh artifacts/server-24x7/
+          cp Update-Server.sh artifacts/server-24x7/
+          cp Stop-Server.sh artifacts/server-24x7/
+          cp Dockerfile artifacts/server-24x7/
+          cp Render.Caddyfile artifacts/server-24x7/
+          cp package.json artifacts/server-24x7/
+          cp tsconfig.base.json artifacts/server-24x7/
+          mkdir -p artifacts/server-24x7/apps artifacts/server-24x7/packages
+          cp -R apps/server artifacts/server-24x7/apps/
+          cp -R apps/web artifacts/server-24x7/apps/
+          cp -R apps/android-shell artifacts/server-24x7/apps/
+          cp -R packages/crypto artifacts/server-24x7/packages/
+          cp -R packages/protocol artifacts/server-24x7/packages/
+          mkdir -p artifacts/server-24x7/docs
+          cp docs/server-24x7.md artifacts/server-24x7/docs/
+          chmod +x artifacts/server-24x7/*.sh
+          (cd artifacts && zip -r FamilyMessenger-0.3.8-rc1-Server-24x7.zip server-24x7)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FamilyMessenger-0.3.8-rc1-Server-24x7
+          path: artifacts/FamilyMessenger-0.3.8-rc1-Server-24x7.zip
+          if-no-files-found: error

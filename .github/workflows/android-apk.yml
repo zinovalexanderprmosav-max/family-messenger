@@ -1,0 +1,33 @@
+name: Release Android APK
+
+on:
+  push:
+    branches:
+      - release/0.3.8-rc1
+  pull_request:
+    branches:
+      - feat/phase3c8-production-deploy
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build debug APK
+        run: gradle -p apps/android-shell :app:assembleDebug --no-daemon
+      - name: Prepare artifact
+        run: |
+          mkdir -p artifacts
+          cp apps/android-shell/app/build/outputs/apk/debug/app-debug.apk artifacts/FamilyMessenger-0.3.8-rc1.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FamilyMessenger-0.3.8-rc1-apk
+          path: artifacts/FamilyMessenger-0.3.8-rc1.apk
+          if-no-files-found: error

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "test": "vitest",
+    "test": "vitest --fileParallelism=false",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

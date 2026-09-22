@@ -46,6 +46,21 @@ CREATE TABLE IF NOT EXISTS invitations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS device_enrollments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+  member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  created_by_device_id UUID NOT NULL REFERENCES devices(id),
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS device_enrollments_member_active
+  ON device_enrollments(member_id,expires_at)
+  WHERE consumed_at IS NULL AND revoked_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS chats (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
@@ -78,6 +93,21 @@ CREATE TABLE IF NOT EXISTS device_key_envelopes (
   FOREIGN KEY(chat_id,key_version) REFERENCES conversation_key_versions(chat_id,key_version) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS chat_key_rotations (
+  chat_id UUID NOT NULL,
+  from_key_version INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('required','completed')),
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ,
+  PRIMARY KEY(chat_id,from_key_version),
+  FOREIGN KEY(chat_id,from_key_version)
+    REFERENCES conversation_key_versions(chat_id,key_version)
+    ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS chat_key_rotations_required
+  ON chat_key_rotations(chat_id,status)
+  WHERE status='required';
+
 CREATE TABLE IF NOT EXISTS message_envelopes (
   message_id UUID PRIMARY KEY,
   chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
@@ -91,6 +121,17 @@ CREATE TABLE IF NOT EXISTS message_envelopes (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS message_id_idempotency ON message_envelopes(message_id);
 CREATE INDEX IF NOT EXISTS message_reconcile_cursor ON message_envelopes(chat_id,sequence);
+
+CREATE TABLE IF NOT EXISTS message_attachments (
+  attachment_id UUID PRIMARY KEY,
+  chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  uploader_device_id UUID NOT NULL REFERENCES devices(id),
+  nonce TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  ciphertext_bytes INTEGER NOT NULL CHECK(ciphertext_bytes > 0 AND ciphertext_bytes <= 26214400),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS message_attachments_chat ON message_attachments(chat_id,created_at);
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
@@ -121,4 +162,52 @@ CREATE TABLE IF NOT EXISTS audit_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE families
+  ADD COLUMN IF NOT EXISTS primary_admin_member_id UUID;
+
+DO $$
+BEGIN
+  ALTER TABLE families
+    ADD CONSTRAINT families_primary_admin_member_fk
+    FOREIGN KEY (primary_admin_member_id)
+    REFERENCES members(id)
+    ON DELETE RESTRICT;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+UPDATE families f
+SET primary_admin_member_id = (
+  SELECT fm.member_id
+  FROM family_memberships fm
+  WHERE fm.family_id=f.id
+    AND fm.role='admin'
+    AND fm.status='active'
+  ORDER BY fm.created_at, fm.member_id
+  LIMIT 1
+)
+WHERE f.primary_admin_member_id IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM family_memberships fm
+    WHERE fm.family_id=f.id
+      AND fm.role='admin'
+      AND fm.status='active'
+  );
+
+ALTER TABLE invitations ADD COLUMN IF NOT EXISTS intended_member_display_name TEXT;
+ALTER TABLE invitations DROP CONSTRAINT IF EXISTS invitations_intended_name_length;
+ALTER TABLE invitations
+  ADD CONSTRAINT invitations_intended_name_length CHECK (
+    intended_member_display_name IS NULL OR length(intended_member_display_name) BETWEEN 1 AND 80
+  );
+
+ALTER TABLE chats ADD COLUMN IF NOT EXISTS write_disabled_at TIMESTAMPTZ;
+ALTER TABLE chats ADD COLUMN IF NOT EXISTS write_disabled_reason TEXT;
+DO $$ BEGIN
+ ALTER TABLE chats ADD CONSTRAINT chats_write_state CHECK (
+  (write_disabled_at IS NULL AND write_disabled_reason IS NULL) OR
+  (write_disabled_at IS NOT NULL AND write_disabled_reason='member_removed')
+ );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 COMMIT;
