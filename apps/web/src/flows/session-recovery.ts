@@ -2,7 +2,7 @@ import type {LocalProfile} from '../local/db.js';
 import {hasLocalEncryptedKeystore} from '../local/keystore.js';
 import {saveProfile} from '../local/session.js';
 
-type SessionContext={
+export type SessionContext={
   familyId:string;
   memberId:string;
   deviceId:string;
