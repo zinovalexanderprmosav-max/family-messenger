@@ -85,13 +85,17 @@ async function sendTextOutbox(item:OutboxTextItem,pin:string){
   try{
     const stored=await postEnvelope(current.envelope);
     await persist([stored]);await deleteOutbox(item.messageId);
-    return visibleFromEnvelope(stored,pin,'sent');
+    const visible=await visibleFromEnvelope(stored,pin,'sent');
+    if(visible.kind!=='text')throw new Error('invalid_message_payload');
+    return visible;
   }catch(error){
     if(error instanceof Error&&error.message==='key_rotation_required'){
       current=await reencryptAfterRotation(current,pin);
       const stored=await postEnvelope(current.envelope);
       await persist([stored]);await deleteOutbox(item.messageId);
-      return visibleFromEnvelope(stored,pin,'sent');
+      const visible=await visibleFromEnvelope(stored,pin,'sent');
+      if(visible.kind!=='text')throw new Error('invalid_message_payload');
+      return visible;
     }
     throw error;
   }
@@ -130,7 +134,9 @@ async function sendAttachmentOutbox(item:OutboxAttachmentItem,pin:string,deviceI
   try{
     const stored=await postEnvelope(current.envelope!);
     await persist([stored]);await deleteOutbox(item.messageId);
-    return visibleFromEnvelope(stored,pin,'sent');
+    const visible=await visibleFromEnvelope(stored,pin,'sent');
+    if(visible.kind!=='attachment')throw new Error('invalid_message_payload');
+    return visible;
   }catch(error){
     if(error instanceof Error&&error.message==='key_rotation_required'){
       const old=await loadChatKey(item.chatId,pin,current.envelope!.keyVersion);
@@ -145,7 +151,9 @@ async function sendAttachmentOutbox(item:OutboxAttachmentItem,pin:string,deviceI
       current={...current,envelope};await putOutbox(current);
       const stored=await postEnvelope(envelope);
       await persist([stored]);await deleteOutbox(item.messageId);
-      return visibleFromEnvelope(stored,pin,'sent');
+      const visible=await visibleFromEnvelope(stored,pin,'sent');
+      if(visible.kind!=='attachment')throw new Error('invalid_message_payload');
+      return visible;
     }
     throw error;
   }
