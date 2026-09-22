@@ -1,1 +1,16 @@
-export function WelcomeScreen({onCreate}:{onCreate:()=>void}){return <main className="center-card"><div className="logo-mark">F</div><h1>Family Messenger</h1><p>Закрытый семейный чат с шифрованием на ваших устройствах.</p><button className="primary" onClick={onCreate}>Создать семью</button><p className="hint">Для присоединения откройте семейный QR-код на этом устройстве.</p></main>;}
+import {ThemeSwitcher} from '../components/ThemeSwitcher.js';
+
+export function WelcomeScreen({onCreate}:{onCreate:()=>void}){
+  return <main className="welcome-screen">
+    <div className="welcome-top"><ThemeSwitcher compact/></div>
+    <section className="welcome-card">
+      <div className="brand-orb hero">F</div>
+      <span className="eyebrow">Только для своих</span>
+      <h1>Family Messenger</h1>
+      <p className="welcome-lead">Спокойное семейное пространство для сообщений, фото и важных моментов — со сквозным шифрованием на ваших устройствах.</p>
+      <div className="feature-chips"><span>Семейный чат</span><span>Личные сообщения</span><span>E2EE</span></div>
+      <button className="primary welcome-cta" onClick={onCreate}>Создать нашу семью</button>
+      <p className="hint welcome-hint">Если вас пригласили, просто откройте или отсканируйте семейный QR-код.</p>
+    </section>
+  </main>;
+}
