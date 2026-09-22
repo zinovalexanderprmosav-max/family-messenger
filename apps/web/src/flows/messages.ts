@@ -180,7 +180,9 @@ export async function sendTextMessage(text:string,pin:string,chatId?:string){
   catch(error){
     item=await markRetry(item,error) as OutboxTextItem;
     if(!isNetworkError(error)&&!(error instanceof Error&&error.message==='key_rotation_required'))throw error;
-    return visibleFromEnvelope(item.envelope,pin,item.status);
+    const visible=await visibleFromEnvelope(item.envelope,pin,item.status);
+    if(visible.kind!=='text')throw new Error('invalid_message_payload');
+    return visible;
   }
 }
 
