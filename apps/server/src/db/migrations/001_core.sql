@@ -153,6 +153,13 @@ CREATE TABLE IF NOT EXISTS auth_challenges (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS device_recovery_backups (
+  device_id UUID PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+  recovery_token_hash TEXT NOT NULL UNIQUE,
+  encrypted_keystore JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS audit_events (
   id BIGSERIAL PRIMARY KEY,
   family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
