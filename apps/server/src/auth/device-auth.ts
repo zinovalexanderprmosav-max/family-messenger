@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { DatabasePool } from '../db/pool.js';
-import { AuthChallengeRequest, AuthCompleteRequest } from '@family-messenger/protocol';
+import { AuthIdentifyRequest, AuthChallengeRequest, AuthCompleteRequest } from '@family-messenger/protocol';
 import { fromBase64, utf8, verifyDetached } from '@family-messenger/crypto';
 import { createSession, setSessionCookie } from './session.js';
 
@@ -10,6 +10,18 @@ export function authChallengeBytes(input:{challengeId:string;deviceId:string;cha
 }
 
 export async function registerDeviceAuthRoutes(app:FastifyInstance,pool:DatabasePool,production:boolean){
+  app.post('/v1/auth/identify',async(request,reply)=>{
+    const input=AuthIdentifyRequest.parse(request.body);
+    const r=await pool.query<{id:string;status:string}>(`
+      SELECT id,status
+      FROM devices
+      WHERE signing_public_key=$1
+      LIMIT 1
+    `,[input.signingPublicKey]);
+    const row=r.rows[0];
+    if(!row||row.status==='revoked')return reply.code(404).send({error:'device_not_found'});
+    return {deviceId:row.id};
+  });
   app.post('/v1/auth/challenge',async(request,reply)=>{
     const input=AuthChallengeRequest.parse(request.body);
     const device=await pool.query<{status:string}>(`SELECT status FROM devices WHERE id=$1`,[input.deviceId]);
