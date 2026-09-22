@@ -1,15 +1,13 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useState} from 'react';
 import {api} from '../api/client.js';
 
-type ProviderMode='auto'|'ollama'|'openrouter';
 type AssistantStatus={
   providers:{
-    ollama:{configured:boolean;model:string};
     openrouter:{configured:boolean;model:string};
   };
 };
-type UiMessage={role:'user'|'assistant';content:string;provider?:string;model?:string};
-type AssistantResponse={provider:'ollama'|'openrouter';model:string;content:string};
+type UiMessage={role:'user'|'assistant';content:string;model?:string};
+type AssistantResponse={provider:'openrouter';model:string;content:string};
 
 const QUICK_PROMPTS=[
   'Составь семейный список покупок на неделю',
@@ -20,18 +18,15 @@ const QUICK_PROMPTS=[
 
 function errorText(error:unknown){
   if(!(error instanceof Error))return 'Не удалось получить ответ.';
-  if(error.message==='assistant_not_configured')return 'ИИ пока не подключён. Настройте Ollama или OpenRouter на сервере.';
-  if(error.message==='ollama_not_configured')return 'Локальный Ollama пока не настроен.';
-  if(error.message==='ollama_unavailable')return 'Локальный Ollama сейчас недоступен.';
-  if(error.message==='openrouter_not_configured')return 'OpenRouter пока не настроен.';
-  if(error.message==='openrouter_auth_failed')return 'Ключ OpenRouter не принят.';
-  if(error.message==='openrouter_rate_limited')return 'Бесплатный лимит OpenRouter временно исчерпан.';
+  if(error.message==='openrouter_not_configured')return 'Семейный помощник пока не подключён.';
+  if(error.message==='openrouter_auth_failed')return 'Ключ помощника не принят сервером.';
+  if(error.message==='openrouter_rate_limited')return 'Бесплатный лимит помощника временно исчерпан.';
+  if(error.message==='openrouter_unavailable')return 'Семейный помощник временно недоступен.';
   return error.message;
 }
 
 export function AssistantScreen(){
   const [status,setStatus]=useState<AssistantStatus|null>(null);
-  const [provider,setProvider]=useState<ProviderMode>('auto');
   const [messages,setMessages]=useState<UiMessage[]>([]);
   const [draft,setDraft]=useState('');
   const [busy,setBusy]=useState(false);
@@ -45,12 +40,6 @@ export function AssistantScreen(){
     return()=>{cancelled=true;};
   },[]);
 
-  const providerLabel=useMemo(()=>{
-    if(provider==='ollama')return 'Локальный Ollama';
-    if(provider==='openrouter')return 'OpenRouter Free';
-    return 'Авто';
-  },[provider]);
-
   async function ask(text:string){
     const normalized=text.trim();
     if(!normalized||busy)return;
@@ -60,12 +49,11 @@ export function AssistantScreen(){
       const response=await api<AssistantResponse>('/v1/assistant/chat',{
         method:'POST',
         body:JSON.stringify({
-          provider,
           messages:next.map(message=>({role:message.role,content:message.content}))
         })
       });
       setMessages(current=>[...current,{
-        role:'assistant',content:response.content,provider:response.provider,model:response.model
+        role:'assistant',content:response.content,model:response.model
       }]);
     }catch(err){setError(errorText(err));}
     finally{setBusy(false);}
@@ -81,20 +69,13 @@ export function AssistantScreen(){
           <p>Получает только то, что вы сами отправляете ему в этот раздел.</p>
         </div>
       </div>
-      <label className="assistant-provider">
-        <span>Режим</span>
-        <select value={provider} onChange={event=>setProvider(event.target.value as ProviderMode)}>
-          <option value="auto">Авто</option>
-          <option value="ollama">Локальный Ollama</option>
-          <option value="openrouter">OpenRouter Free</option>
-        </select>
-      </label>
     </header>
 
     <div className="assistant-status">
-      <span className={status?.providers.ollama.configured?'ready':''}>● Ollama {status?.providers.ollama.configured?'настроен':'не настроен'}</span>
-      <span className={status?.providers.openrouter.configured?'ready':''}>● OpenRouter {status?.providers.openrouter.configured?'настроен':'не настроен'}</span>
-      <strong>{providerLabel}</strong>
+      <span className={status?.providers.openrouter.configured?'ready':''}>
+        ● ИИ {status?.providers.openrouter.configured?'подключён':'не подключён'}
+      </span>
+      <strong>OpenRouter Free</strong>
     </div>
 
     <div className="assistant-thread">
@@ -108,7 +89,7 @@ export function AssistantScreen(){
       </div>}
       {messages.map((message,index)=><article key={index} className={'assistant-message '+message.role}>
         <div>{message.content}</div>
-        {message.role==='assistant'&&message.provider&&<small>{message.provider==='ollama'?'Локальный':'Облачный'} · {message.model}</small>}
+        {message.role==='assistant'&&message.model&&<small>ИИ · {message.model}</small>}
       </article>)}
       {busy&&<article className="assistant-message assistant thinking"><span className="assistant-thinking">● ● ●</span></article>}
     </div>
