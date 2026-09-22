@@ -11,7 +11,7 @@ type VisibleBase={messageId:string;sentAt:string;senderDeviceId:string;sequence:
 export type VisibleTextMessage=VisibleBase&{kind:'text';text:string};
 export type VisibleAttachmentMessage=VisibleBase&{
   kind:'attachment';attachmentId:string;attachmentKey:string;fileName:string;mimeType:string;
-  size:number;mediaKind:'image'|'video'|'file';
+  size:number;mediaKind:'image'|'video'|'audio'|'file';
 };
 export type VisibleMessage=VisibleTextMessage|VisibleAttachmentMessage;
 
