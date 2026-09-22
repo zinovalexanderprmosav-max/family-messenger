@@ -14,6 +14,7 @@ import { DeviceManagementScreen } from './screens/DeviceManagementScreen.js';
 import { FamilyContacts,type FamilyContact } from './components/FamilyContacts.js';
 import { SettingsPanel } from './components/SettingsPanel.js';
 import { ThemeSwitcher } from './components/ThemeSwitcher.js';
+import { StandaloneInstallHint } from './components/StandaloneInstallHint.js';
 import type { LocalProfile } from './local/db.js';
 
 type FamilySummary={primaryAdminMemberId:string|null;members:FamilyContact[]};
@@ -55,6 +56,7 @@ export default function App(){
   const showAdmin=role==='admin'&&family;
 
   return <div className="app-shell">
+    <StandaloneInstallHint/>
     <header className="app-topbar">
       <div className="brand-lockup">
         <div className="brand-orb small">F</div>
