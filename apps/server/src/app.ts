@@ -21,6 +21,7 @@ import { registerDirectChatRoutes } from './direct-chats/routes.js';
 import { RealtimeHub } from './realtime/hub.js';
 import { registerRealtimeRoutes } from './realtime/routes.js';
 import { registerRecoveryBackupRoutes } from './recovery/routes.js';
+import { registerAssistantRoutes } from './assistant/routes.js';
 
 export async function buildApp(options:{skipDatabase?:boolean;pool?:DatabasePool}={}){
   const config=loadConfig(process.env);
@@ -49,6 +50,7 @@ export async function buildApp(options:{skipDatabase?:boolean;pool?:DatabasePool
     await registerDirectChatRoutes(app,pool);
     await registerRealtimeRoutes(app,pool,hub);
     await registerRecoveryBackupRoutes(app,pool);
+    await registerAssistantRoutes(app,pool,config);
   }
   app.setErrorHandler((error,_request,reply)=>{const normalized=error instanceof Error?error:new Error('unknown_error');const status=(normalized as Error&{statusCode?:number}).statusCode??500;reply.code(status).send({error:status>=500?'internal_error':normalized.message});});
   return app;

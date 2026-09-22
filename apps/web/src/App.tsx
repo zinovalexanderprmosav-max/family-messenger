@@ -9,6 +9,7 @@ import { JoinFamilyScreen } from './screens/JoinFamilyScreen.js';
 import { AddOwnDeviceScreen } from './screens/AddOwnDeviceScreen.js';
 import { PendingApprovalScreen } from './screens/PendingApprovalScreen.js';
 import { FamilyChatScreen } from './screens/FamilyChatScreen.js';
+import { AssistantScreen } from './screens/AssistantScreen.js';
 import { AdminScreen } from './screens/AdminScreen.js';
 import { DeviceManagementScreen } from './screens/DeviceManagementScreen.js';
 import { FamilyContacts,type FamilyContact } from './components/FamilyContacts.js';
@@ -21,7 +22,7 @@ import { recoverProfileFromServerSession,type SessionContext } from './flows/ses
 import type { LocalProfile } from './local/db.js';
 
 type FamilySummary={primaryAdminMemberId:string|null;members:FamilyContact[]};
-type MobileView='chat'|'contacts'|'devices'|'admin'|'settings';
+type MobileView='chat'|'assistant'|'contacts'|'devices'|'admin'|'settings';
 
 export default function App(){
   const [profile,setProfile]=useState<LocalProfile|null|undefined>(undefined);
@@ -94,6 +95,9 @@ export default function App(){
       <div className={mobileView==='chat'?'mobile-pane active':'mobile-pane'}>
         <FamilyChatScreen selectedMember={selectedMember}/>
       </div>
+      {mobileView==='assistant'&&<div className="mobile-pane active assistant-pane">
+        <AssistantScreen/>
+      </div>}
       <aside className="side-stack">
         {family&&<div className={mobileView==='contacts'?'mobile-pane active':'mobile-pane desktop-visible'}>
           <FamilyContacts members={family.members} currentMemberId={profile.memberId} selectedMemberId={selectedMember?.id??null} onSelectMember={pickMember}/>
@@ -108,6 +112,7 @@ export default function App(){
 
     <nav className="bottom-nav" aria-label="Основная навигация">
       <button className={mobileView==='chat'?'active':''} onClick={()=>setMobileView('chat')}><span>●</span><small>Чаты</small></button>
+      <button className={mobileView==='assistant'?'active':''} onClick={()=>setMobileView('assistant')}><span>✦</span><small>Помощник</small></button>
       <button className={mobileView==='contacts'?'active':''} onClick={()=>setMobileView('contacts')}><span>♧</span><small>Контакты</small></button>
       <button className={mobileView==='devices'?'active':''} onClick={()=>setMobileView('devices')}><span>▣</span><small>Устройства</small></button>
       {showAdmin&&<button className={mobileView==='admin'?'active':''} onClick={()=>setMobileView('admin')}><span>◇</span><small>Семья</small></button>}

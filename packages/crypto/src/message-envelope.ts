@@ -2,7 +2,8 @@ import type { EncryptedMessageEnvelope, MessageMutation } from '@family-messenge
 import { fromBase64, text, toBase64, utf8 } from './encoding.js';
 import { getSodium } from './sodium.js';
 
-export type TextMessagePayload = { kind: 'text'; text: string; sentAt: string };
+export type ReplyReference={messageId:string;preview:string};
+export type TextMessagePayload = { kind:'text'; text:string; sentAt:string; replyTo?:ReplyReference };
 export type AttachmentMessagePayload = {
   kind:'attachment';
   attachmentId:string;
@@ -12,10 +13,12 @@ export type AttachmentMessagePayload = {
   size:number;
   mediaKind:'image'|'video'|'audio'|'file';
   sentAt:string;
+  replyTo?:ReplyReference;
 };
 export type EditMessagePayload={kind:'edit';text:string;sentAt:string};
 export type DeleteMessagePayload={kind:'delete';sentAt:string};
-export type MessagePayload=TextMessagePayload|AttachmentMessagePayload|EditMessagePayload|DeleteMessagePayload;
+export type ReactionMessagePayload={kind:'reaction';emoji:string;action:'add'|'remove';sentAt:string};
+export type MessagePayload=TextMessagePayload|AttachmentMessagePayload|EditMessagePayload|DeleteMessagePayload|ReactionMessagePayload;
 
 export function messageAad(input: {messageId:string;chatId:string;senderDeviceId:string;keyVersion:number;mutation?:MessageMutation|undefined}) {
   const base=`fm:v1|${input.messageId}|${input.chatId}|${input.senderDeviceId}|${input.keyVersion}`;
@@ -70,9 +73,17 @@ export async function decryptMessagePayload(envelope:EncryptedMessageEnvelope,ke
       key
     );
     const parsed = JSON.parse(text(plaintext)) as Partial<MessagePayload>;
-    if(parsed.kind==='text'&&typeof parsed.text==='string'&&typeof parsed.sentAt==='string')return parsed as TextMessagePayload;
+    if(parsed.kind==='text'&&typeof parsed.text==='string'&&typeof parsed.sentAt==='string'){
+      if(parsed.replyTo!==undefined&&(
+        typeof parsed.replyTo!=='object'||parsed.replyTo===null||
+        typeof (parsed.replyTo as ReplyReference).messageId!=='string'||
+        typeof (parsed.replyTo as ReplyReference).preview!=='string'
+      ))throw new Error('invalid_message_payload');
+      return parsed as TextMessagePayload;
+    }
     if(parsed.kind==='edit'&&typeof parsed.text==='string'&&typeof parsed.sentAt==='string')return parsed as EditMessagePayload;
     if(parsed.kind==='delete'&&typeof parsed.sentAt==='string')return parsed as DeleteMessagePayload;
+    if(parsed.kind==='reaction'&&typeof parsed.emoji==='string'&&(parsed.action==='add'||parsed.action==='remove')&&typeof parsed.sentAt==='string')return parsed as ReactionMessagePayload;
     if(
       parsed.kind==='attachment'
       &&typeof parsed.attachmentId==='string'
@@ -84,6 +95,11 @@ export async function decryptMessagePayload(envelope:EncryptedMessageEnvelope,ke
       &&parsed.size>=0
       &&(parsed.mediaKind==='image'||parsed.mediaKind==='video'||parsed.mediaKind==='audio'||parsed.mediaKind==='file')
       &&typeof parsed.sentAt==='string'
+      &&(parsed.replyTo===undefined||(
+        typeof parsed.replyTo==='object'&&parsed.replyTo!==null&&
+        typeof (parsed.replyTo as ReplyReference).messageId==='string'&&
+        typeof (parsed.replyTo as ReplyReference).preview==='string'
+      ))
     )return parsed as AttachmentMessagePayload;
     throw new Error('invalid_message_payload');
   } catch (error) {

@@ -88,7 +88,7 @@ export const EncryptedAttachmentSchema = z.object({
 });
 
 export const MessageMutationSchema = z.object({
-  kind: z.enum(['edit','delete']),
+  kind: z.enum(['edit','delete','reaction']),
   targetMessageId: Id
 });
 

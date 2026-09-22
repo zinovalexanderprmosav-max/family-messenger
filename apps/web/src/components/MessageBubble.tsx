@@ -97,13 +97,18 @@ function AttachmentContent({message}:{message:VisibleAttachmentMessage}){
   </div>;
 }
 
+const QUICK_REACTIONS=['❤️','👍','😂','😮','😢','🙏'];
+
 export function MessageBubble({
-  message,mine,onEdit,onDelete,actionsDisabled=false
+  message,mine,currentDeviceId,onReply,onReact,onEdit,onDelete,actionsDisabled=false
 }:{
-  message:VisibleMessage;mine:boolean;onEdit?:(()=>void)|undefined;onDelete?:(()=>void)|undefined;actionsDisabled?:boolean|undefined;
+  message:VisibleMessage;mine:boolean;currentDeviceId:string;
+  onReply?:(()=>void)|undefined;
+  onReact?:((emoji:string,action:'add'|'remove')=>void)|undefined;
+  onEdit?:(()=>void)|undefined;onDelete?:(()=>void)|undefined;actionsDisabled?:boolean|undefined;
 }){
   const [menuOpen,setMenuOpen]=useState(false);
-  const canAct=mine&&message.kind!=='deleted'&&(onEdit||onDelete);
+  const canAct=message.kind!=='deleted'&&(onReply||onReact||onEdit||onDelete);
 
   return <article className={`message ${mine?'mine':''} ${message.kind==='deleted'?'message-deleted':''}`}>
     <div className="message-meta">
@@ -115,15 +120,33 @@ export function MessageBubble({
       {canAct&&<div className="message-actions">
         <button type="button" className="message-menu-button" aria-label="Действия с сообщением" aria-expanded={menuOpen} disabled={actionsDisabled} onClick={()=>setMenuOpen(value=>!value)}>⋯</button>
         {menuOpen&&<div className="message-menu" role="menu">
+          {onReply&&<button type="button" role="menuitem" onClick={()=>{setMenuOpen(false);onReply();}}>Ответить</button>}
+          {onReact&&<div className="message-reaction-picker" aria-label="Реакции">
+            {QUICK_REACTIONS.map(emoji=>{
+              const reacted=message.reactions?.some(reaction=>reaction.emoji===emoji&&reaction.senderDeviceIds.includes(currentDeviceId))??false;
+              return <button key={emoji} type="button" className={reacted?'active':''} aria-label={(reacted?'Убрать реакцию ':'Поставить реакцию ')+emoji} onClick={()=>{setMenuOpen(false);onReact(emoji,reacted?'remove':'add');}}>{emoji}</button>;
+            })}
+          </div>}
           {message.kind==='text'&&onEdit&&<button type="button" role="menuitem" onClick={()=>{setMenuOpen(false);onEdit();}}>Редактировать</button>}
           {onDelete&&<button type="button" role="menuitem" className="message-menu-danger" onClick={()=>{setMenuOpen(false);onDelete();}}>Удалить</button>}
         </div>}
       </div>}
     </div>
+    {message.replyTo&&message.kind!=='deleted'&&<div className="message-reply-preview">
+      <span>Ответ на сообщение</span><strong>{message.replyTo.preview}</strong>
+    </div>}
     {message.kind==='text'
       ?<TextContent text={message.text}/>
       :message.kind==='attachment'
         ?<AttachmentContent message={message}/>
         :<div className="deleted-message-text">Сообщение удалено</div>}
+    {message.kind!=='deleted'&&message.reactions&&message.reactions.length>0&&<div className="message-reactions">
+      {message.reactions.map(reaction=>{
+        const reacted=reaction.senderDeviceIds.includes(currentDeviceId);
+        return <button key={reaction.emoji} type="button" className={reacted?'active':''} disabled={actionsDisabled||!onReact} onClick={()=>onReact?.(reaction.emoji,reacted?'remove':'add')}>
+          <span>{reaction.emoji}</span><small>{reaction.senderDeviceIds.length}</small>
+        </button>;
+      })}
+    </div>}
   </article>;
 }

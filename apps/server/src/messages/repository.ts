@@ -11,7 +11,7 @@ export async function insertMessageEnvelope(tx:PoolClient,envelope:EncryptedMess
 }
 
 export async function listMessageEnvelopesAfter(tx:PoolClient,chatId:string,afterSequence:string,limit:number):Promise<StoredMessageEnvelope[]>{
-  const r=await tx.query<{message_id:string;chat_id:string;sender_device_id:string;key_version:number;nonce:string;ciphertext:string;sequence:string;accepted_at:Date;mutation_kind:'edit'|'delete'|null;target_message_id:string|null}>(`SELECT message_id,chat_id,sender_device_id,key_version,nonce,ciphertext,sequence::text,accepted_at,mutation_kind,target_message_id FROM message_envelopes WHERE chat_id=$1 AND sequence>$2::bigint ORDER BY sequence LIMIT $3`,[chatId,afterSequence,limit]);
+  const r=await tx.query<{message_id:string;chat_id:string;sender_device_id:string;key_version:number;nonce:string;ciphertext:string;sequence:string;accepted_at:Date;mutation_kind:'edit'|'delete'|'reaction'|null;target_message_id:string|null}>(`SELECT message_id,chat_id,sender_device_id,key_version,nonce,ciphertext,sequence::text,accepted_at,mutation_kind,target_message_id FROM message_envelopes WHERE chat_id=$1 AND sequence>$2::bigint ORDER BY sequence LIMIT $3`,[chatId,afterSequence,limit]);
   return r.rows.map(row=>({
     messageId:row.message_id,chatId:row.chat_id,senderDeviceId:row.sender_device_id,keyVersion:row.key_version,
     nonce:row.nonce,ciphertext:row.ciphertext,sequence:row.sequence,acceptedAt:row.accepted_at.toISOString(),

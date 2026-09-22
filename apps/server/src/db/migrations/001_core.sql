@@ -124,11 +124,10 @@ CREATE INDEX IF NOT EXISTS message_reconcile_cursor ON message_envelopes(chat_id
 
 ALTER TABLE message_envelopes ADD COLUMN IF NOT EXISTS mutation_kind TEXT;
 ALTER TABLE message_envelopes ADD COLUMN IF NOT EXISTS target_message_id UUID;
-DO $migration$ BEGIN
-  ALTER TABLE message_envelopes
-    ADD CONSTRAINT message_envelopes_mutation_kind_check
-    CHECK (mutation_kind IS NULL OR mutation_kind IN ('edit','delete'));
-EXCEPTION WHEN duplicate_object THEN NULL; END $migration$;
+ALTER TABLE message_envelopes DROP CONSTRAINT IF EXISTS message_envelopes_mutation_kind_check;
+ALTER TABLE message_envelopes
+  ADD CONSTRAINT message_envelopes_mutation_kind_check
+  CHECK (mutation_kind IS NULL OR mutation_kind IN ('edit','delete','reaction'));
 DO $migration$ BEGIN
   ALTER TABLE message_envelopes
     ADD CONSTRAINT message_envelopes_mutation_pair_check

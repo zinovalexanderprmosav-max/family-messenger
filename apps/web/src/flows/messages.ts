@@ -8,8 +8,11 @@ import { prepareAttachmentFile,uploadEncryptedAttachment } from './attachments.j
 import { rotateChatKey, syncCurrentChatKey } from './key-rotation.js';
 
 export type DeliveryStatus='queued'|'sending'|'failed'|'sent';
+export type ReplyReference={messageId:string;preview:string};
+export type VisibleReaction={emoji:string;senderDeviceIds:string[]};
 type VisibleBase={
-  messageId:string;sentAt:string;senderDeviceId:string;sequence:string;chatId:string;deliveryStatus?:DeliveryStatus;editedAt?:string;
+  messageId:string;sentAt:string;senderDeviceId:string;sequence:string;chatId:string;
+  deliveryStatus?:DeliveryStatus;editedAt?:string;replyTo?:ReplyReference;reactions?:VisibleReaction[];
 };
 export type VisibleTextMessage=VisibleBase&{kind:'text';text:string};
 export type VisibleAttachmentMessage=VisibleBase&{
@@ -20,7 +23,8 @@ export type VisibleDeletedMessage=VisibleBase&{kind:'deleted';deletedAt:string};
 export type VisibleMessage=VisibleTextMessage|VisibleAttachmentMessage|VisibleDeletedMessage;
 
 type DecryptedMutation={
-  kind:'mutation';mutationKind:'edit'|'delete';targetMessageId:string;text?:string;mutatedAt:string;sequence:string;
+  kind:'mutation';mutationKind:'edit'|'delete'|'reaction';targetMessageId:string;text?:string;emoji?:string;
+  action?:'add'|'remove';actorDeviceId:string;mutatedAt:string;sequence:string;
 };
 type DecryptedEvent={kind:'message';message:VisibleMessage}|DecryptedMutation;
 
@@ -48,17 +52,21 @@ async function decryptEvent(item:StoredMessageEnvelope|EncryptedMessageEnvelope,
 
   if(item.mutation){
     if(item.mutation.kind==='edit'&&payload.kind==='edit'){
-      return {kind:'mutation',mutationKind:'edit',targetMessageId:item.mutation.targetMessageId,text:payload.text,mutatedAt:payload.sentAt,sequence};
+      return {kind:'mutation',mutationKind:'edit',targetMessageId:item.mutation.targetMessageId,text:payload.text,actorDeviceId:item.senderDeviceId,mutatedAt:payload.sentAt,sequence};
     }
     if(item.mutation.kind==='delete'&&payload.kind==='delete'){
-      return {kind:'mutation',mutationKind:'delete',targetMessageId:item.mutation.targetMessageId,mutatedAt:payload.sentAt,sequence};
+      return {kind:'mutation',mutationKind:'delete',targetMessageId:item.mutation.targetMessageId,actorDeviceId:item.senderDeviceId,mutatedAt:payload.sentAt,sequence};
+    }
+    if(item.mutation.kind==='reaction'&&payload.kind==='reaction'){
+      return {kind:'mutation',mutationKind:'reaction',targetMessageId:item.mutation.targetMessageId,emoji:payload.emoji,action:payload.action,actorDeviceId:item.senderDeviceId,mutatedAt:payload.sentAt,sequence};
     }
     throw new Error('invalid_message_mutation');
   }
 
   const base={
     messageId:item.messageId,sentAt:payload.sentAt,senderDeviceId:item.senderDeviceId,
-    sequence,chatId:item.chatId,deliveryStatus:status
+    sequence,chatId:item.chatId,deliveryStatus:status,reactions:[],
+    ...(('replyTo' in payload&&payload.replyTo)?{replyTo:payload.replyTo}:{})
   };
   if(payload.kind==='text')return {kind:'message',message:{...base,kind:'text',text:payload.text}};
   if(payload.kind==='attachment')return {kind:'message',message:{
@@ -92,6 +100,20 @@ async function applyStoredEvents(items:StoredMessageEnvelope[],pin:string){
       if(target.kind==='text'&&typeof event.text==='string'){
         byId.set(target.messageId,{...target,text:event.text,editedAt:event.mutatedAt});
       }
+      continue;
+    }
+    if(event.mutationKind==='reaction'){
+      if(target.kind==='deleted'||!event.emoji||!event.action)continue;
+      const reactions=(target.reactions??[]).map(reaction=>({emoji:reaction.emoji,senderDeviceIds:[...reaction.senderDeviceIds]}));
+      const existing=reactions.find(reaction=>reaction.emoji===event.emoji);
+      if(event.action==='add'){
+        if(existing){
+          if(!existing.senderDeviceIds.includes(event.actorDeviceId))existing.senderDeviceIds.push(event.actorDeviceId);
+        }else reactions.push({emoji:event.emoji,senderDeviceIds:[event.actorDeviceId]});
+      }else if(existing){
+        existing.senderDeviceIds=existing.senderDeviceIds.filter(id=>id!==event.actorDeviceId);
+      }
+      byId.set(target.messageId,{...target,reactions:reactions.filter(reaction=>reaction.senderDeviceIds.length>0)});
       continue;
     }
     byId.set(target.messageId,{
@@ -216,7 +238,7 @@ async function markRetry(item:OutboxItem,error:unknown){
   await putOutbox(next);return next;
 }
 
-export async function sendTextMessage(text:string,pin:string,chatId?:string){
+export async function sendTextMessage(text:string,pin:string,chatId?:string,replyTo?:ReplyReference){
   const profile=await loadProfile();if(!profile||profile.status!=='active')throw new Error('active_profile_required');
   const targetChatId=chatId??profile.familyChatId;
   const current=await loadChatKey(targetChatId,pin);
@@ -224,7 +246,7 @@ export async function sendTextMessage(text:string,pin:string,chatId?:string){
   const messageId=crypto.randomUUID();
   const envelope=await encryptMessagePayload({
     messageId,chatId:targetChatId,senderDeviceId:profile.deviceId,keyVersion:current.keyVersion,key:current.key,
-    payload:{kind:'text',text,sentAt}
+    payload:{kind:'text',text,sentAt,...(replyTo?{replyTo}:{})}
   });
   let item:OutboxTextItem={messageId,chatId:targetChatId,kind:'text',envelope,sentAt,status:'sending',attempts:0};
   await putOutbox(item);
@@ -263,7 +285,7 @@ export async function sendAttachmentMessage(file:File,pin:string,chatId?:string)
   }
 }
 
-async function sendMutation(input:{chatId:string;targetMessageId:string;kind:'edit'|'delete';text?:string},pin:string){
+async function sendMutation(input:{chatId:string;targetMessageId:string;kind:'edit'|'delete'|'reaction';text?:string;emoji?:string;action?:'add'|'remove'},pin:string){
   const profile=await loadProfile();if(!profile||profile.status!=='active')throw new Error('active_profile_required');
   const sentAt=new Date().toISOString();
   const send=async()=>{
@@ -273,7 +295,9 @@ async function sendMutation(input:{chatId:string;targetMessageId:string;kind:'ed
       keyVersion:current.keyVersion,key:current.key,
       payload:input.kind==='edit'
         ?{kind:'edit',text:input.text??'',sentAt}
-        :{kind:'delete',sentAt},
+        :input.kind==='reaction'
+          ?{kind:'reaction',emoji:input.emoji??'',action:input.action??'add',sentAt}
+          :{kind:'delete',sentAt},
       mutation:{kind:input.kind,targetMessageId:input.targetMessageId}
     });
     const stored=await postEnvelope(envelope);
@@ -297,6 +321,11 @@ export async function editTextMessage(chatId:string,targetMessageId:string,text:
 
 export async function deleteMessage(chatId:string,targetMessageId:string,pin:string){
   return sendMutation({chatId,targetMessageId,kind:'delete'},pin);
+}
+
+export async function reactToMessage(chatId:string,targetMessageId:string,emoji:string,action:'add'|'remove',pin:string){
+  if(!emoji.trim())throw new Error('reaction_required');
+  return sendMutation({chatId,targetMessageId,kind:'reaction',emoji,action},pin);
 }
 
 export async function flushOutbox(pin:string,chatId?:string){
