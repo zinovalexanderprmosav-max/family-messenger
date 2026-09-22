@@ -88,13 +88,18 @@ export default function App(){
         <div className="brand-orb small">F</div>
         <div><strong>{profile.familyDisplayName??'Family Messenger'}</strong><span>{profile.memberDisplayName}</span></div>
       </div>
-      <ThemeSwitcher compact/>
+      <div className="topbar-actions">
+        <button className={mobileView==='assistant'?'assistant-topbar-button active':'assistant-topbar-button'} onClick={()=>setMobileView(mobileView==='assistant'?'chat':'assistant')}>
+          <span>✦</span><span>Помощник</span>
+        </button>
+        <ThemeSwitcher compact/>
+      </div>
     </header>
 
     <main className="app-layout">
-      <div className={mobileView==='chat'?'mobile-pane active':'mobile-pane'}>
+      {mobileView!=='assistant'&&<div className={mobileView==='chat'?'mobile-pane active':'mobile-pane'}>
         <FamilyChatScreen selectedMember={selectedMember}/>
-      </div>
+      </div>}
       {mobileView==='assistant'&&<div className="mobile-pane active assistant-pane">
         <AssistantScreen/>
       </div>}
