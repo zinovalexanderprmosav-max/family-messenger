@@ -12,10 +12,12 @@ import { FamilyChatScreen } from './screens/FamilyChatScreen.js';
 import { AdminScreen } from './screens/AdminScreen.js';
 import { DeviceManagementScreen } from './screens/DeviceManagementScreen.js';
 import { FamilyContacts,type FamilyContact } from './components/FamilyContacts.js';
-import { BuildInfo } from './components/BuildInfo.js';
+import { SettingsPanel } from './components/SettingsPanel.js';
+import { ThemeSwitcher } from './components/ThemeSwitcher.js';
 import type { LocalProfile } from './local/db.js';
 
 type FamilySummary={primaryAdminMemberId:string|null;members:FamilyContact[]};
+type MobileView='chat'|'contacts'|'devices'|'admin'|'settings';
 
 export default function App(){
   const [profile,setProfile]=useState<LocalProfile|null|undefined>(undefined);
@@ -24,6 +26,7 @@ export default function App(){
   const [selectedMember,setSelectedMember]=useState<FamilyContact|null>(null);
   const [mode,setMode]=useState<'home'|'create'>('home');
   const [familyRefresh,setFamilyRefresh]=useState(0);
+  const [mobileView,setMobileView]=useState<MobileView>('chat');
   const [joinToken]=useState(()=>consumeJoinTokenFromHash());
   const [deviceToken]=useState(()=>consumeDeviceEnrollmentTokenFromHash());
   const refresh=()=>void loadProfile().then(setProfile);
@@ -41,18 +44,47 @@ export default function App(){
     return()=>{cancelled=true;};
   },[profile,familyRefresh]);
 
-  if(profile===undefined)return <main className="center-card">Загрузка…</main>;
+  if(profile===undefined)return <main className="splash-screen"><div className="brand-orb">F</div><div className="spinner"/></main>;
   if(!profile&&joinToken)return <JoinFamilyScreen token={joinToken} onDone={refresh}/>;
   if(!profile&&deviceToken)return <AddOwnDeviceScreen token={deviceToken} onDone={refresh}/>;
   if(!profile&&mode==='create')return <CreateFamilyScreen onDone={refresh} onBack={()=>setMode('home')}/>;
   if(!profile)return <WelcomeScreen onCreate={()=>setMode('create')}/>;
   if(profile.status==='pending_key')return <PendingApprovalScreen onDone={refresh}/>;
-  return <div className="app-layout">
-    <FamilyChatScreen selectedMember={selectedMember}/>
-    <div className="side-stack">
-      {family&&<FamilyContacts members={family.members} currentMemberId={profile.memberId} selectedMemberId={selectedMember?.id??null} onSelectMember={setSelectedMember}/>}
-      <DeviceManagementScreen/>
-      {role==='admin'&&family&&<AdminScreen family={family} currentMemberId={profile.memberId} onChanged={()=>setFamilyRefresh(value=>value+1)}/>}\n      <BuildInfo/>
-    </div>
+
+  const pickMember=(member:FamilyContact|null)=>{setSelectedMember(member);setMobileView('chat');};
+  const showAdmin=role==='admin'&&family;
+
+  return <div className="app-shell">
+    <header className="app-topbar">
+      <div className="brand-lockup">
+        <div className="brand-orb small">F</div>
+        <div><strong>{profile.familyDisplayName??'Family Messenger'}</strong><span>{profile.memberDisplayName}</span></div>
+      </div>
+      <ThemeSwitcher compact/>
+    </header>
+
+    <main className="app-layout">
+      <div className={mobileView==='chat'?'mobile-pane active':'mobile-pane'}>
+        <FamilyChatScreen selectedMember={selectedMember}/>
+      </div>
+      <aside className="side-stack">
+        {family&&<div className={mobileView==='contacts'?'mobile-pane active':'mobile-pane desktop-visible'}>
+          <FamilyContacts members={family.members} currentMemberId={profile.memberId} selectedMemberId={selectedMember?.id??null} onSelectMember={pickMember}/>
+        </div>}
+        <div className={mobileView==='devices'?'mobile-pane active':'mobile-pane desktop-visible'}><DeviceManagementScreen/></div>
+        {showAdmin&&<div className={mobileView==='admin'?'mobile-pane active':'mobile-pane desktop-visible'}>
+          <AdminScreen family={family} currentMemberId={profile.memberId} onChanged={()=>setFamilyRefresh(value=>value+1)}/>
+        </div>}
+        <div className={mobileView==='settings'?'mobile-pane active':'mobile-pane desktop-visible'}><SettingsPanel/></div>
+      </aside>
+    </main>
+
+    <nav className="bottom-nav" aria-label="Основная навигация">
+      <button className={mobileView==='chat'?'active':''} onClick={()=>setMobileView('chat')}><span>●</span><small>Чаты</small></button>
+      <button className={mobileView==='contacts'?'active':''} onClick={()=>setMobileView('contacts')}><span>♧</span><small>Контакты</small></button>
+      <button className={mobileView==='devices'?'active':''} onClick={()=>setMobileView('devices')}><span>▣</span><small>Устройства</small></button>
+      {showAdmin&&<button className={mobileView==='admin'?'active':''} onClick={()=>setMobileView('admin')}><span>◇</span><small>Семья</small></button>}
+      <button className={mobileView==='settings'?'active':''} onClick={()=>setMobileView('settings')}><span>⚙</span><small>Настройки</small></button>
+    </nav>
   </div>;
 }
