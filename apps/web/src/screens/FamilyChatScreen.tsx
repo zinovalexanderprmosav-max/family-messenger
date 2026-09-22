@@ -50,7 +50,7 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
   useEffect(()=>{
     if(!profile||!readyPin){setActiveChatId('');return;}
     let cancelled=false;let stop=()=>{};
-    setActiveChatId('');setMessages([]);setConnection('connecting');
+    setActiveChatId('');setMessages([]);setEditingMessage(null);setDraft('');setConnection('connecting');
     const activate=async()=>{
       try{
         const chatId=selectedMember?(await openDirectChat(selectedMember.id,readyPin)).chatId:profile.familyChatId;
