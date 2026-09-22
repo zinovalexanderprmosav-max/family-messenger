@@ -9,6 +9,28 @@ type AssistantStatus={
 type UiMessage={role:'user'|'assistant';content:string;model?:string};
 type AssistantResponse={provider:'openrouter';model:string;content:string};
 
+function formatInline(text:string){
+  return text.split(/(\\*\\*[^*]+\\*\\*)/g).filter(Boolean).map((part,index)=>
+    part.startsWith('**')&&part.endsWith('**')
+      ? <strong key={index}>{part.slice(2,-2)}</strong>
+      : <span key={index}>{part}</span>
+  );
+}
+
+function AssistantContent({content}:{content:string}){
+  return <div className="assistant-markdown">{content.split('\\n').map((raw,index)=>{
+    const line=raw.trimEnd();
+    if(!line.trim())return <div className="assistant-md-spacer" key={index}/>;
+    if(line.startsWith('### '))return <h4 key={index}>{formatInline(line.slice(4))}</h4>;
+    if(line.startsWith('## '))return <h3 key={index}>{formatInline(line.slice(3))}</h3>;
+    if(line.startsWith('# '))return <h3 key={index}>{formatInline(line.slice(2))}</h3>;
+    if(/^[-*] /.test(line))return <div className="assistant-md-list" key={index}><span>•</span><div>{formatInline(line.slice(2))}</div></div>;
+    const numbered=line.match(/^(\\d+)[.)]\\s+(.*)$/);
+    if(numbered)return <div className="assistant-md-list" key={index}><span>{numbered[1]}.</span><div>{formatInline(numbered[2])}</div></div>;
+    return <p key={index}>{formatInline(line)}</p>;
+  })}</div>;
+}
+
 const QUICK_PROMPTS=[
   'Составь семейный список покупок на неделю',
   'Помоги спланировать выходные',
@@ -88,7 +110,7 @@ export function AssistantScreen(){
         </div>
       </div>}
       {messages.map((message,index)=><article key={index} className={'assistant-message '+message.role}>
-        <div>{message.content}</div>
+        {message.role==='assistant'?<AssistantContent content={message.content}/>:<div>{message.content}</div>}
         {message.role==='assistant'&&message.model&&<small>ИИ · {message.model}</small>}
       </article>)}
       {busy&&<article className="assistant-message assistant thinking"><span className="assistant-thinking">● ● ●</span></article>}
