@@ -1,4 +1,5 @@
 import type {SessionContext} from '../flows/session-recovery.js';
+import {RecoveryCodeForm} from '../components/RecoveryCodeForm.js';
 
 export function RecoveryRequiredScreen({
   context,
@@ -11,21 +12,17 @@ export function RecoveryRequiredScreen({
     <section className="welcome-card recovery-card">
       <div className="brand-orb hero">F</div>
       <span className="eyebrow">Существующая семья найдена</span>
-      <h1>Не создавайте новую семью</h1>
+      <h1>Восстановить ключ устройства</h1>
       <p className="welcome-lead">
-        Сервер узнал это устройство как <strong>{context.memberDisplayName}</strong> в семье
-        {' '}«<strong>{context.familyDisplayName}</strong>», но локальный ключ шифрования сейчас недоступен.
+        Сервер узнал профиль <strong>{context.memberDisplayName}</strong> в семье
+        {' '}«<strong>{context.familyDisplayName}</strong>», но локальный ключ сейчас недоступен.
       </p>
       <div className="recovery-facts">
         <div><span>Профиль</span><strong>{context.memberDisplayName}</strong></div>
         <div><span>Устройство</span><strong>{context.deviceName}</strong></div>
         <div><span>Семья</span><strong>{context.familyDisplayName}</strong></div>
       </div>
-      <p className="hint">
-        Если ключ восстановится из локальной резервной копии, приложение вернёт доступ автоматически.
-        В противном случае это устройство нужно безопасно переподключить из другого доверенного устройства.
-      </p>
-      <button className="primary welcome-cta" onClick={onRetry}>Проверить восстановление ещё раз</button>
+      <RecoveryCodeForm onDone={onRetry}/>
     </section>
   </main>;
 }
