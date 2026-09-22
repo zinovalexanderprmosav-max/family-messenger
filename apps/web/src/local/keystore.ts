@@ -26,6 +26,16 @@ async function loadEncryptedKeystore(){
   return shadow;
 }
 
+export async function hasLocalEncryptedKeystore(){
+  const db=await getDb();
+  const row=await db.get('keystore','device');
+  if(row){
+    saveKeystoreShadow(row.blob);
+    return true;
+  }
+  return Boolean(loadKeystoreShadow<EncryptedKeystoreBlob>());
+}
+
 export async function unlockDeviceProfile(pin:string){
   const blob=await loadEncryptedKeystore();
   if(!blob)throw new Error('keystore_not_found');

@@ -11,6 +11,7 @@ import { createPool, type DatabasePool } from './db/pool.js';
 import { migrate } from './db/migrate.js';
 import { loadConfig } from './config.js';
 import { registerDeviceAuthRoutes } from './auth/device-auth.js';
+import { registerSessionContextRoutes } from './auth/session-context.js';
 import { registerFamilyRoutes } from './families/routes.js';
 import { registerInvitationRoutes } from './invitations/routes.js';
 import { registerKeyRoutes } from './keys/routes.js';
@@ -34,6 +35,7 @@ export async function buildApp(options:{skipDatabase?:boolean;pool?:DatabasePool
     await migrate(pool);
     const hub=new RealtimeHub();
     await registerDeviceAuthRoutes(app,pool,config.nodeEnv==='production');
+    await registerSessionContextRoutes(app,pool);
     await registerDeviceRoutes(app,pool,hub);
     await registerMemberRoutes(app,pool,hub);
     await registerFamilyRoutes(app,pool,config.nodeEnv==='production');

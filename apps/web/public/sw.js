@@ -1,4 +1,4 @@
-const CACHE='family-shell-v4-final';
+const CACHE='family-shell-v5-ios-standalone';
 const SHELL=['/manifest.webmanifest','/icon.svg'];
 
 self.addEventListener('install',event=>{
