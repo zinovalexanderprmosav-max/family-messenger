@@ -1,6 +1,12 @@
 :{$PORT} {
   encode gzip zstd
 
+  @serviceWorker path /sw.js
+  header @serviceWorker Cache-Control "no-store, no-cache, must-revalidate"
+
+  @appShell path / /index.html
+  header @appShell Cache-Control "no-store, no-cache, must-revalidate"
+
   handle /v1/* {
     reverse_proxy 127.0.0.1:8787
   }
