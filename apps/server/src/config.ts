@@ -4,7 +4,7 @@ const Config = z.object({
   PORT:z.coerce.number().int().min(1).max(65535).default(8787),
   DATABASE_URL:z.string().min(1).default('postgres://family:family-dev-only@localhost:5432/family'),
   NODE_ENV:z.enum(['development','test','production']).default('development'),
-  APP_VERSION:z.string().min(1).default('0.4.0-final')
+  APP_VERSION:z.string().min(1).default('0.4.1')
 });
 export function loadConfig(env:NodeJS.ProcessEnv){
   const p=Config.parse(env);

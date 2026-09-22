@@ -4,6 +4,7 @@ import type { AcceptResponse } from '../api/types.js';
 import { createLockedDeviceProfile } from '../local/keystore.js';
 import { getNativeDeviceName, loadProfile, saveProfile, setUnlockedPin } from '../local/session.js';
 import { syncAllDeviceKeys } from './key-provisioning.js';
+import { ensureRecoveryBackup } from './recovery-backup.js';
 
 export function consumeJoinTokenFromHash(locationLike:Pick<Location,'hash'>=window.location){
   const hash=locationLike.hash;const match=hash.match(/^#\/join\?token=([^&]+)/);if(!match)return null;
@@ -33,5 +34,5 @@ export async function acceptInvitation(input:{joinToken:string;memberDisplayName
 export async function completePendingApproval(pin:string){
   const profile=await loadProfile();if(!profile)throw new Error('profile_not_found');
   await syncAllDeviceKeys(pin);
-  const active={...profile,status:'active' as const};await saveProfile(active);setUnlockedPin(pin);return active;
+  const active={...profile,status:'active' as const};await saveProfile(active);setUnlockedPin(pin);await ensureRecoveryBackup();return active;
 }

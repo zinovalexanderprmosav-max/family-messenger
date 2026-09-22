@@ -189,3 +189,33 @@ h3{font-size:1rem;margin-top:24px}
 .recovery-warning{display:grid;gap:7px;margin:18px 0;padding:15px 16px;border-radius:18px;background:var(--warning-soft);color:var(--warning);border:1px solid color-mix(in srgb,var(--warning) 20%,var(--line))}
 .recovery-warning strong{font-size:.92rem}.recovery-warning span{font-size:.82rem;line-height:1.5}
 .recovery-card .form{margin-top:20px}
+
+.recovery-code-card{max-width:620px}
+.recovery-code{
+  margin:18px 0;
+  padding:18px;
+  border-radius:20px;
+  border:1px dashed color-mix(in srgb,var(--accent) 45%,var(--line));
+  background:var(--accent-soft);
+  color:var(--accent);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:clamp(1rem,4vw,1.35rem);
+  font-weight:900;
+  letter-spacing:.06em;
+  text-align:center;
+  overflow-wrap:anywhere;
+  user-select:all;
+}
+.recovery-code.compact{font-size:.92rem;padding:13px;margin:12px 0}
+.recovery-code-actions{display:flex;gap:10px;flex-wrap:wrap}
+.recovery-code-actions>*{flex:1 1 180px}
+.recovery-note{margin:14px 0 0;color:var(--muted);font-size:.78rem;line-height:1.5}
+.recovery-message{margin-top:10px}
+.recovery-code-form{margin-top:18px}
+.recovery-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}
+.recovery-facts>div{display:grid;gap:3px;padding:12px;border-radius:16px;background:var(--surface-soft);border:1px solid var(--line)}
+.recovery-facts span{font-size:.7rem;color:var(--muted)}.recovery-facts strong{font-size:.84rem;overflow-wrap:anywhere}
+@media(max-width:520px){
+  .recovery-code-actions{display:grid}
+  .recovery-facts{grid-template-columns:1fr}
+}
