@@ -94,3 +94,7 @@ h3{font-size:1rem;margin-top:24px}
   .composer{gap:6px}.send,.attach-button,.voice-button{width:44px;height:44px}.welcome-card h1{font-size:2.25rem}
 }
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
+.empty-chat{margin:auto;display:grid;place-items:center;text-align:center;gap:9px;color:var(--muted);max-width:320px;padding:28px}.empty-chat strong{color:var(--text);font-size:1rem}.empty-chat span{font-size:.86rem;line-height:1.5}
+.recording-banner{display:flex;align-items:center;justify-content:center;gap:8px;padding:7px 12px;color:var(--danger);font-size:.82rem;font-weight:800;background:var(--danger-soft)}.record-dot{width:9px;height:9px;border-radius:50%;background:var(--danger);animation:pulse 1.2s infinite}
+.message-status.status-queued,.message-status.status-sending{color:var(--muted)}.message-status.status-sent{color:var(--accent)}.message-status.status-failed{color:var(--danger)}
