@@ -1,9 +1,11 @@
 package com.familymessenger.app;
 
+import android.Manifest;
 import android.app.AlertDialog;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
@@ -14,6 +16,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.PermissionRequest;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -36,6 +39,7 @@ import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
 
 public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1001;
+    private static final int AUDIO_PERMISSION_REQUEST = 1002;
     private static final String PREFS = "family_messenger";
     private static final String PREF_SERVER_URL = "server_url";
     private static final String PREF_AUTO_PIN = "auto_pin";
@@ -43,6 +47,7 @@ public final class MainActivity extends Activity {
     private WebView webView;
     private LinearLayout onboarding;
     private ValueCallback<Uri[]> fileCallback;
+    private PermissionRequest pendingAudioPermission;
     private SharedPreferences preferences;
 
     @Override
@@ -190,6 +195,29 @@ public final class MainActivity extends Activity {
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(PermissionRequest request) {
+                runOnUiThread(() -> {
+                    boolean asksForAudio = false;
+                    for (String resource : request.getResources()) {
+                        if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+                            asksForAudio = true;
+                            break;
+                        }
+                    }
+                    if (!asksForAudio) {
+                        request.deny();
+                        return;
+                    }
+                    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+                    } else {
+                        pendingAudioPermission = request;
+                        requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, AUDIO_PERMISSION_REQUEST);
+                    }
+                });
+            }
+
             @Override
             public boolean onShowFileChooser(
                     WebView webView,
@@ -374,6 +402,21 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == AUDIO_PERMISSION_REQUEST && pendingAudioPermission != null) {
+            PermissionRequest request = pendingAudioPermission;
+            pendingAudioPermission = null;
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+            } else {
+                request.deny();
+                Toast.makeText(this, "Для голосовых сообщений нужен доступ к микрофону", Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    @Override
     public void onBackPressed() {
         if (webView != null && webView.getVisibility() == View.VISIBLE && webView.canGoBack()) {
             webView.goBack();
@@ -389,6 +432,8 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         if (fileCallback != null) fileCallback.onReceiveValue(null);
         fileCallback = null;
+        if (pendingAudioPermission != null) pendingAudioPermission.deny();
+        pendingAudioPermission = null;
         if (webView != null) {
             webView.stopLoading();
             webView.destroy();
