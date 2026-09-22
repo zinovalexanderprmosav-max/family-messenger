@@ -22,10 +22,32 @@ function TextContent({text}:{text:string}){
     :<span key={index}>{part}</span>)}</div>;
 }
 
+function PhotoViewer({url,fileName,onClose}:{url:string;fileName:string;onClose:()=>void}){
+  useEffect(()=>{
+    const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')onClose();};
+    window.addEventListener('keydown',onKey);
+    const previous=document.body.style.overflow;
+    document.body.style.overflow='hidden';
+    return()=>{window.removeEventListener('keydown',onKey);document.body.style.overflow=previous;};
+  },[onClose]);
+
+  return <div className="photo-viewer" role="dialog" aria-modal="true" aria-label={fileName} onClick={onClose}>
+    <div className="photo-viewer-toolbar" onClick={event=>event.stopPropagation()}>
+      <strong>{fileName}</strong>
+      <div>
+        <a className="photo-viewer-open" href={url} target="_blank" rel="noreferrer">Открыть отдельно</a>
+        <button className="photo-viewer-close" aria-label="Закрыть фото" onClick={onClose}>×</button>
+      </div>
+    </div>
+    <img className="photo-viewer-image" src={url} alt={fileName} onClick={event=>event.stopPropagation()}/>
+  </div>;
+}
+
 function AttachmentContent({message}:{message:VisibleAttachmentMessage}){
   const [url,setUrl]=useState('');
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState('');
+  const [viewerOpen,setViewerOpen]=useState(false);
 
   async function load(){
     if(url||loading)return;
@@ -36,28 +58,42 @@ function AttachmentContent({message}:{message:VisibleAttachmentMessage}){
         attachmentKey:message.attachmentKey,mimeType:message.mimeType
       });
       setUrl(URL.createObjectURL(blob));
-    }catch(e){setError(e instanceof Error?e.message:'Не удалось открыть файл');}
-    finally{setLoading(false);}
+    }catch(e){
+      setError(e instanceof Error?e.message:'Не удалось открыть файл');
+    }finally{
+      setLoading(false);
+    }
   }
 
   useEffect(()=>{
+    setError('');setViewerOpen(false);
     if(message.localBlob||message.mediaKind==='image'||message.mediaKind==='audio')void load();
-    return()=>{if(url)URL.revokeObjectURL(url);};
+    return()=>{};
   },[message.messageId]);
 
+  useEffect(()=>()=>{if(url)URL.revokeObjectURL(url);},[url]);
+
   return <div className="attachment-content">
-    {message.mediaKind==='image'&&url&&<img className="chat-image" src={url} alt={message.fileName}/>}
+    {message.mediaKind==='image'&&url&&<>
+      <button type="button" className="chat-image-button" aria-label="Открыть фото" onClick={()=>setViewerOpen(true)}>
+        <img className="chat-image" src={url} alt={message.fileName} onError={()=>setError('Не удалось показать фото')}/>
+      </button>
+      {viewerOpen&&<PhotoViewer url={url} fileName={message.fileName} onClose={()=>setViewerOpen(false)}/>}
+    </>}
     {message.mediaKind==='video'&&url&&<video className="chat-video" src={url} controls playsInline/>}
     {message.mediaKind==='audio'&&url&&<audio className="voice-player" src={url} controls preload="metadata"/>}
     <div className="attachment-meta">
       <strong>{message.mediaKind==='audio'?'Голосовое сообщение':message.fileName}</strong>
       <span>{formatBytes(message.size)}</span>
     </div>
+    {!url&&message.mediaKind==='image'&&<button className="attachment-open" onClick={()=>void load()} disabled={loading}>
+      {loading?'Открываем фото…':'Открыть фото'}
+    </button>}
     {!url&&message.mediaKind!=='image'&&message.mediaKind!=='audio'&&<button className="attachment-open" onClick={()=>void load()} disabled={loading}>
       {loading?'Открываем…':message.mediaKind==='video'?'Открыть видео':'Открыть файл'}
     </button>}
     {url&&message.mediaKind==='file'&&<a className="attachment-open attachment-link" href={url} download={message.fileName}>Сохранить файл</a>}
-    {error&&<div className="error">{error}</div>}
+    {error&&<div className="error attachment-error">{error}</div>}
   </div>;
 }
 
