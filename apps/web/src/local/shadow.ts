@@ -1,5 +1,6 @@
 const PROFILE_KEY='family-messenger:profile-shadow:v1';
 const KEYSTORE_KEY='family-messenger:keystore-shadow:v1';
+const RECOVERY_CODE_KEY='family-messenger:recovery-code:v1';
 
 function storage(){
   try{
@@ -26,10 +27,20 @@ export function loadKeystoreShadow<T>():T|null{
     return raw?JSON.parse(raw) as T:null;
   }catch{return null;}
 }
+export function saveRecoveryCode(value:string){
+  try{storage()?.setItem(RECOVERY_CODE_KEY,value);}catch{}
+}
+export function loadRecoveryCode(){
+  try{return storage()?.getItem(RECOVERY_CODE_KEY)??null;}catch{return null;}
+}
+export function clearRecoveryCode(){
+  try{storage()?.removeItem(RECOVERY_CODE_KEY);}catch{}
+}
 export function clearLocalShadows(){
   try{
     const target=storage();
     target?.removeItem(PROFILE_KEY);
     target?.removeItem(KEYSTORE_KEY);
+    target?.removeItem(RECOVERY_CODE_KEY);
   }catch{}
 }
