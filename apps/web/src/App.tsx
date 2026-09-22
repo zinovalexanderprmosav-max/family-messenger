@@ -72,7 +72,7 @@ export default function App(){
           <FamilyContacts members={family.members} currentMemberId={profile.memberId} selectedMemberId={selectedMember?.id??null} onSelectMember={pickMember}/>
         </div>}
         <div className={mobileView==='devices'?'mobile-pane active':'mobile-pane desktop-visible'}><DeviceManagementScreen/></div>
-        {showAdmin&&<div className={mobileView==='admin'?'mobile-pane active':'mobile-pane desktop-visible'}>
+        {role==='admin'&&family&&<div className={mobileView==='admin'?'mobile-pane active':'mobile-pane desktop-visible'}>
           <AdminScreen family={family} currentMemberId={profile.memberId} onChanged={()=>setFamilyRefresh(value=>value+1)}/>
         </div>}
         <div className={mobileView==='settings'?'mobile-pane active':'mobile-pane desktop-visible'}><SettingsPanel/></div>
