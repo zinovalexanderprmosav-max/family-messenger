@@ -1,7 +1,9 @@
 import {ThemeSwitcher} from '../components/ThemeSwitcher.js';
+import {StandaloneInstallHint} from '../components/StandaloneInstallHint.js';
 
 export function WelcomeScreen({onCreate}:{onCreate:()=>void}){
   return <main className="welcome-screen">
+    <StandaloneInstallHint/>
     <div className="welcome-top"><ThemeSwitcher compact/></div>
     <section className="welcome-card">
       <div className="brand-orb hero">F</div>
