@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { BootstrapResponse } from '../api/types.js';
 import { identityToPlain, savePlainKeystore } from '../local/keystore.js';
 import { saveProfile, setUnlockedPin } from '../local/session.js';
+import { ensureRecoveryBackup } from './recovery-backup.js';
 
 export async function bootstrapFamily(input:{familyDisplayName:string;memberDisplayName:string;deviceName:string;pin:string}){
   const identity=await generateDeviceIdentity();
@@ -16,5 +17,6 @@ export async function bootstrapFamily(input:{familyDisplayName:string;memberDisp
   await savePlainKeystore(plain,input.pin);
   await saveProfile({familyId:response.familyId,memberId:response.memberId,deviceId:response.deviceId,familyChatId:response.familyChatId,status:'active',csrfToken:response.csrfToken,memberDisplayName:input.memberDisplayName,familyDisplayName:input.familyDisplayName});
   setUnlockedPin(input.pin);
-  return {familyId:response.familyId,memberId:response.memberId,deviceId:response.deviceId,familyChatId:response.familyChatId};
+  const recoveryCode=await ensureRecoveryBackup();
+  return {familyId:response.familyId,memberId:response.memberId,deviceId:response.deviceId,familyChatId:response.familyChatId,recoveryCode};
 }
