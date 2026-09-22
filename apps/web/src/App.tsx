@@ -16,6 +16,7 @@ import { SettingsPanel } from './components/SettingsPanel.js';
 import { ThemeSwitcher } from './components/ThemeSwitcher.js';
 import { StandaloneInstallHint } from './components/StandaloneInstallHint.js';
 import { RecoveryRequiredScreen } from './screens/RecoveryRequiredScreen.js';
+import { RecoverExistingDeviceScreen } from './screens/RecoverExistingDeviceScreen.js';
 import { recoverProfileFromServerSession,type SessionContext } from './flows/session-recovery.js';
 import type { LocalProfile } from './local/db.js';
 
@@ -27,7 +28,7 @@ export default function App(){
   const [family,setFamily]=useState<FamilySummary|null>(null);
   const [role,setRole]=useState<'admin'|'member'|null>(null);
   const [selectedMember,setSelectedMember]=useState<FamilyContact|null>(null);
-  const [mode,setMode]=useState<'home'|'create'>('home');
+  const [mode,setMode]=useState<'home'|'create'|'recover'>('home');
   const [familyRefresh,setFamilyRefresh]=useState(0);
   const [mobileView,setMobileView]=useState<MobileView>('chat');
   const [recoveryContext,setRecoveryContext]=useState<SessionContext|null>(null);
@@ -71,8 +72,9 @@ export default function App(){
   if(!profile&&joinToken)return <JoinFamilyScreen token={joinToken} onDone={refresh}/>;
   if(!profile&&deviceToken)return <AddOwnDeviceScreen token={deviceToken} onDone={refresh}/>;
   if(!profile&&recoveryContext)return <RecoveryRequiredScreen context={recoveryContext} onRetry={refresh}/>;
+  if(!profile&&mode==='recover')return <RecoverExistingDeviceScreen onDone={refresh} onBack={()=>setMode('home')}/>;
   if(!profile&&mode==='create')return <CreateFamilyScreen onDone={refresh} onBack={()=>setMode('home')}/>;
-  if(!profile)return <WelcomeScreen onCreate={()=>setMode('create')}/>;
+  if(!profile)return <WelcomeScreen onCreate={()=>setMode('create')} onRecover={()=>setMode('recover')}/>;
   if(profile.status==='pending_key')return <PendingApprovalScreen onDone={refresh}/>;
 
   const pickMember=(member:FamilyContact|null)=>{setSelectedMember(member);setMobileView('chat');};

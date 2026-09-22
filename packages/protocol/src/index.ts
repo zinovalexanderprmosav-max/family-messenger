@@ -101,6 +101,7 @@ export const StoredMessageEnvelopeSchema = EncryptedMessageEnvelopeSchema.extend
   acceptedAt: z.string().datetime()
 });
 
+export const AuthIdentifyRequest = z.object({ signingPublicKey: Base64 });
 export const AuthChallengeRequest = z.object({ deviceId: Id });
 export const AuthCompleteRequest = z.object({
   challengeId: Id,
