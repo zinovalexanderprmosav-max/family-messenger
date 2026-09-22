@@ -69,7 +69,7 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
 
   useEffect(()=>{
     if(!readyPin)return;
-    const online=()=>{void flushOutbox(readyPin,activeChatId||undefined).then(()=>activeChatId&&refreshMessages());};
+    const online=()=>{void flushOutbox(readyPin,activeChatId||undefined).then(()=>{if(activeChatId)void refreshMessages();});};
     window.addEventListener('online',online);
     return()=>window.removeEventListener('online',online);
   },[readyPin,activeChatId]);
