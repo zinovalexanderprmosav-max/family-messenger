@@ -15,6 +15,8 @@ import { FamilyContacts,type FamilyContact } from './components/FamilyContacts.j
 import { SettingsPanel } from './components/SettingsPanel.js';
 import { ThemeSwitcher } from './components/ThemeSwitcher.js';
 import { StandaloneInstallHint } from './components/StandaloneInstallHint.js';
+import { RecoveryRequiredScreen } from './screens/RecoveryRequiredScreen.js';
+import { recoverProfileFromServerSession,type SessionContext } from './flows/session-recovery.js';
 import type { LocalProfile } from './local/db.js';
 
 type FamilySummary={primaryAdminMemberId:string|null;members:FamilyContact[]};
@@ -28,9 +30,29 @@ export default function App(){
   const [mode,setMode]=useState<'home'|'create'>('home');
   const [familyRefresh,setFamilyRefresh]=useState(0);
   const [mobileView,setMobileView]=useState<MobileView>('chat');
+  const [recoveryContext,setRecoveryContext]=useState<SessionContext|null>(null);
   const [joinToken]=useState(()=>consumeJoinTokenFromHash());
   const [deviceToken]=useState(()=>consumeDeviceEnrollmentTokenFromHash());
-  const refresh=()=>void loadProfile().then(setProfile);
+  const refresh=()=>void (async()=>{
+    const local=await loadProfile();
+    if(local){
+      setRecoveryContext(null);
+      setProfile(local);
+      return;
+    }
+    if(joinToken||deviceToken){
+      setProfile(null);
+      return;
+    }
+    const recovered=await recoverProfileFromServerSession();
+    if(recovered.status==='restored'){
+      setRecoveryContext(null);
+      setProfile(recovered.profile);
+      return;
+    }
+    setRecoveryContext(recovered.status==='keys_missing'?recovered.context:null);
+    setProfile(null);
+  })();
 
   useEffect(refresh,[]);
   useEffect(()=>{
@@ -48,6 +70,7 @@ export default function App(){
   if(profile===undefined)return <main className="splash-screen"><div className="brand-orb">F</div><div className="spinner"/></main>;
   if(!profile&&joinToken)return <JoinFamilyScreen token={joinToken} onDone={refresh}/>;
   if(!profile&&deviceToken)return <AddOwnDeviceScreen token={deviceToken} onDone={refresh}/>;
+  if(!profile&&recoveryContext)return <RecoveryRequiredScreen context={recoveryContext} onRetry={refresh}/>;
   if(!profile&&mode==='create')return <CreateFamilyScreen onDone={refresh} onBack={()=>setMode('home')}/>;
   if(!profile)return <WelcomeScreen onCreate={()=>setMode('create')}/>;
   if(profile.status==='pending_key')return <PendingApprovalScreen onDone={refresh}/>;
