@@ -103,7 +103,7 @@ async function sendTextOutbox(item:OutboxTextItem,pin:string){
 
 async function ensureAttachmentPrepared(item:OutboxAttachmentItem,pin:string){
   if(item.attachment)return item;
-  const file=new File([item.blob],item.fileName,{type:item.mimeType,lastModified:Date.now()});
+  const file=new File([item.bytes],item.fileName,{type:item.mimeType,lastModified:Date.now()});
   let attachment;
   try{attachment=await uploadEncryptedAttachment(file,item.chatId);}
   catch(error){
@@ -192,7 +192,7 @@ export async function sendAttachmentMessage(file:File,pin:string,chatId?:string)
   const prepared=await prepareAttachmentFile(file);
   let item:OutboxAttachmentItem={
     messageId:crypto.randomUUID(),chatId:targetChatId,kind:'attachment',
-    blob:prepared,fileName:prepared.name||'file',mimeType:prepared.type||'application/octet-stream',
+    bytes:await prepared.arrayBuffer(),fileName:prepared.name||'file',mimeType:prepared.type||'application/octet-stream',
     sentAt:new Date().toISOString(),status:'sending',attempts:0
   };
   await putOutbox(item);
@@ -204,9 +204,9 @@ export async function sendAttachmentMessage(file:File,pin:string,chatId?:string)
       messageId:item.messageId,chatId:item.chatId,senderDeviceId:profile.deviceId,
       sequence:`local-${item.sentAt}-${item.messageId}`,sentAt:item.sentAt,kind:'attachment' as const,
       attachmentId:item.attachment?.attachmentId??'',attachmentKey:item.attachment?.attachmentKey??'',
-      fileName:item.fileName,mimeType:item.mimeType,size:item.blob.size,
+      fileName:item.fileName,mimeType:item.mimeType,size:item.bytes.byteLength,
       mediaKind:item.mimeType.startsWith('image/')?'image':item.mimeType.startsWith('video/')?'video':item.mimeType.startsWith('audio/')?'audio':'file',
-      localBlob:item.blob,deliveryStatus:item.status
+      localBlob:new Blob([item.bytes],{type:item.mimeType}),deliveryStatus:item.status
     };
   }
 }
@@ -236,9 +236,9 @@ async function visibleOutbox(chatId:string,pin:string,deviceId:string){
         messageId:item.messageId,chatId:item.chatId,senderDeviceId:deviceId,
         sequence:`local-${item.sentAt}-${item.messageId}`,sentAt:item.sentAt,kind:'attachment',
         attachmentId:item.attachment?.attachmentId??'',attachmentKey:item.attachment?.attachmentKey??'',
-        fileName:item.fileName,mimeType:item.mimeType,size:item.blob.size,
+        fileName:item.fileName,mimeType:item.mimeType,size:item.bytes.byteLength,
         mediaKind:item.mimeType.startsWith('image/')?'image':item.mimeType.startsWith('video/')?'video':item.mimeType.startsWith('audio/')?'audio':'file',
-        localBlob:item.blob,deliveryStatus:item.status
+        localBlob:new Blob([item.bytes],{type:item.mimeType}),deliveryStatus:item.status
       });
     }
   }
