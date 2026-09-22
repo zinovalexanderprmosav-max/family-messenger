@@ -25,8 +25,8 @@ function AssistantContent({content}:{content:string}){
     if(line.startsWith('## '))return <h3 key={index}>{formatInline(line.slice(3))}</h3>;
     if(line.startsWith('# '))return <h3 key={index}>{formatInline(line.slice(2))}</h3>;
     if(/^[-*] /.test(line))return <div className="assistant-md-list" key={index}><span>•</span><div>{formatInline(line.slice(2))}</div></div>;
-    const numbered=line.match(/^(\\d+)[.)]\\s+(.*)$/);
-    if(numbered)return <div className="assistant-md-list" key={index}><span>{numbered[1]}.</span><div>{formatInline(numbered[2])}</div></div>;
+    const numbered=line.match(/^(\d+)[.)]\s+(.*)$/);
+    if(numbered)return <div className="assistant-md-list" key={index}><span>{numbered[1]}.</span><div>{formatInline(numbered[2]??'')}</div></div>;
     return <p key={index}>{formatInline(line)}</p>;
   })}</div>;
 }
