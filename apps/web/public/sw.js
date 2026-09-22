@@ -1,4 +1,4 @@
-const CACHE='family-shell-v2';
+const CACHE='family-shell-v3';
 const SHELL=['/manifest.webmanifest','/icon.svg'];
 
 self.addEventListener('install',event=>{
@@ -35,14 +35,15 @@ self.addEventListener('fetch',event=>{
   }
 
   event.respondWith((async()=>{
-    const cached=await caches.match(event.request);
-    const network=fetch(event.request).then(async response=>{
-      if(response.ok){
+    try{
+      const fresh=await fetch(event.request,{cache:'no-store'});
+      if(fresh.ok){
         const cache=await caches.open(CACHE);
-        await cache.put(event.request,response.clone());
+        await cache.put(event.request,fresh.clone());
       }
-      return response;
-    }).catch(()=>null);
-    return cached??await network??Response.error();
+      return fresh;
+    }catch{
+      return (await caches.match(event.request))??Response.error();
+    }
   })());
 });
