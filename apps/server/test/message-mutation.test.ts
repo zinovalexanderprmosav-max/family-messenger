@@ -43,6 +43,20 @@ describe('message mutation authorization',()=>{
     expect(response.json()).toMatchObject({mutation:{kind:'edit',targetMessageId:s.target}});
   });
 
+  it('allows a family member to react to another member message',async()=>{
+    const s=await seedChat();
+    const response=await app.inject({
+      method:'POST',url:`/v1/chats/${s.chatId}/messages`,
+      headers:{cookie:`fm_session=${s.member.token}`,'x-csrf-token':s.member.csrf},
+      payload:{
+        messageId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',chatId:s.chatId,senderDeviceId:s.member.device,
+        keyVersion:1,nonce:'n',ciphertext:'c',mutation:{kind:'reaction',targetMessageId:s.target}
+      }
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({mutation:{kind:'reaction',targetMessageId:s.target}});
+  });
+
   it('rejects editing another member message',async()=>{
     const s=await seedChat();
     const response=await app.inject({
