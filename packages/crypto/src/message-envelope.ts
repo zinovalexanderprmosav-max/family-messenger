@@ -1,4 +1,4 @@
-import type { EncryptedMessageEnvelope } from '@family-messenger/protocol';
+import type { EncryptedMessageEnvelope, MessageMutation } from '@family-messenger/protocol';
 import { fromBase64, text, toBase64, utf8 } from './encoding.js';
 import { getSodium } from './sodium.js';
 
@@ -13,10 +13,13 @@ export type AttachmentMessagePayload = {
   mediaKind:'image'|'video'|'audio'|'file';
   sentAt:string;
 };
-export type MessagePayload=TextMessagePayload|AttachmentMessagePayload;
+export type EditMessagePayload={kind:'edit';text:string;sentAt:string};
+export type DeleteMessagePayload={kind:'delete';sentAt:string};
+export type MessagePayload=TextMessagePayload|AttachmentMessagePayload|EditMessagePayload|DeleteMessagePayload;
 
-export function messageAad(input: {messageId:string;chatId:string;senderDeviceId:string;keyVersion:number}) {
-  return utf8(`fm:v1|${input.messageId}|${input.chatId}|${input.senderDeviceId}|${input.keyVersion}`);
+export function messageAad(input: {messageId:string;chatId:string;senderDeviceId:string;keyVersion:number;mutation?:MessageMutation}) {
+  const base=`fm:v1|${input.messageId}|${input.chatId}|${input.senderDeviceId}|${input.keyVersion}`;
+  return utf8(input.mutation?`${base}|mutation:${input.mutation.kind}:${input.mutation.targetMessageId}`:base);
 }
 
 export async function encryptMessagePayload(input: {
@@ -26,6 +29,7 @@ export async function encryptMessagePayload(input: {
   keyVersion: number;
   key: Uint8Array;
   payload: MessagePayload;
+  mutation?: MessageMutation;
 }): Promise<EncryptedMessageEnvelope> {
   const sodium = await getSodium();
   const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
@@ -38,7 +42,8 @@ export async function encryptMessagePayload(input: {
     senderDeviceId: input.senderDeviceId,
     keyVersion: input.keyVersion,
     nonce: toBase64(nonce),
-    ciphertext: toBase64(ciphertext)
+    ciphertext: toBase64(ciphertext),
+    ...(input.mutation?{mutation:input.mutation}:{})
   };
 }
 
@@ -66,6 +71,8 @@ export async function decryptMessagePayload(envelope:EncryptedMessageEnvelope,ke
     );
     const parsed = JSON.parse(text(plaintext)) as Partial<MessagePayload>;
     if(parsed.kind==='text'&&typeof parsed.text==='string'&&typeof parsed.sentAt==='string')return parsed as TextMessagePayload;
+    if(parsed.kind==='edit'&&typeof parsed.text==='string'&&typeof parsed.sentAt==='string')return parsed as EditMessagePayload;
+    if(parsed.kind==='delete'&&typeof parsed.sentAt==='string')return parsed as DeleteMessagePayload;
     if(
       parsed.kind==='attachment'
       &&typeof parsed.attachmentId==='string'
