@@ -17,7 +17,7 @@ export type EditMessagePayload={kind:'edit';text:string;sentAt:string};
 export type DeleteMessagePayload={kind:'delete';sentAt:string};
 export type MessagePayload=TextMessagePayload|AttachmentMessagePayload|EditMessagePayload|DeleteMessagePayload;
 
-export function messageAad(input: {messageId:string;chatId:string;senderDeviceId:string;keyVersion:number;mutation?:MessageMutation}) {
+export function messageAad(input: {messageId:string;chatId:string;senderDeviceId:string;keyVersion:number;mutation?:MessageMutation|undefined}) {
   const base=`fm:v1|${input.messageId}|${input.chatId}|${input.senderDeviceId}|${input.keyVersion}`;
   return utf8(input.mutation?`${base}|mutation:${input.mutation.kind}:${input.mutation.targetMessageId}`:base);
 }
@@ -29,7 +29,7 @@ export async function encryptMessagePayload(input: {
   keyVersion: number;
   key: Uint8Array;
   payload: MessagePayload;
-  mutation?: MessageMutation;
+  mutation?: MessageMutation|undefined;
 }): Promise<EncryptedMessageEnvelope> {
   const sodium = await getSodium();
   const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
