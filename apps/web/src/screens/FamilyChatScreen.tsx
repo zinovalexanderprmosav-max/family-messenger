@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {ConnectionBadge} from '../components/ConnectionBadge.js';
 import {MessageBubble} from '../components/MessageBubble.js';
 import {openDirectChat} from '../flows/direct-chat.js';
-import {deleteMessage,editTextMessage,flushOutbox,readLocalVisibleMessages,reconcileChat,sendAttachmentMessage,sendTextMessage,type VisibleMessage,type VisibleTextMessage} from '../flows/messages.js';
+import {deleteMessage,editTextMessage,flushOutbox,reactToMessage,readLocalVisibleMessages,reconcileChat,sendAttachmentMessage,sendTextMessage,type ReplyReference,type VisibleMessage,type VisibleTextMessage} from '../flows/messages.js';
 import {connectRealtime} from '../realtime/socket.js';
 import {getUnlockedPin,setUnlockedPin,loadProfile} from '../local/session.js';
 import {unlockDeviceProfile} from '../local/keystore.js';
@@ -32,6 +32,8 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
   const [draft,setDraft]=useState('');
   const [messages,setMessages]=useState<VisibleMessage[]>([]);
   const [editingMessage,setEditingMessage]=useState<VisibleTextMessage|null>(null);
+  const [replyingTo,setReplyingTo]=useState<ReplyReference|null>(null);
+  const [searchQuery,setSearchQuery]=useState('');
   const [messageActionBusy,setMessageActionBusy]=useState(false);
   const [connection,setConnection]=useState<'connecting'|'online'|'offline'>('offline');
   const [error,setError]=useState('');
@@ -50,7 +52,7 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
   useEffect(()=>{
     if(!profile||!readyPin){setActiveChatId('');return;}
     let cancelled=false;let stop=()=>{};
-    setActiveChatId('');setMessages([]);setEditingMessage(null);setDraft('');setConnection('connecting');
+    setActiveChatId('');setMessages([]);setEditingMessage(null);setReplyingTo(null);setSearchQuery('');setDraft('');setConnection('connecting');
     const activate=async()=>{
       try{
         const chatId=selectedMember?(await openDirectChat(selectedMember.id,readyPin)).chatId:profile.familyChatId;
@@ -117,8 +119,12 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
       return;
     }
     setDraft('');
-    try{await sendTextMessage(text,readyPin,activeChatId);await refreshMessages();setError('');}
-    catch(err){setError(friendlyError(err));setDraft(text);await refreshMessages();}
+    const reply=replyingTo;
+    try{
+      await sendTextMessage(text,readyPin,activeChatId,reply??undefined);
+      setReplyingTo(null);await refreshMessages();setError('');
+    }
+    catch(err){setError(friendlyError(err));setDraft(text);setReplyingTo(reply);await refreshMessages();}
   }
 
   function startEdit(message:VisibleTextMessage){
@@ -127,6 +133,30 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
   }
 
   function cancelEdit(){setEditingMessage(null);setDraft('');}
+
+  function previewFor(message:VisibleMessage){
+    if(message.kind==='text')return message.text.slice(0,120);
+    if(message.kind==='attachment')return message.mediaKind==='audio'?'Голосовое сообщение':message.fileName;
+    return 'Сообщение удалено';
+  }
+
+  function startReply(message:VisibleMessage){
+    if(message.kind==='deleted')return;
+    setEditingMessage(null);
+    setReplyingTo({messageId:message.messageId,preview:previewFor(message)});
+    setError('');
+    window.requestAnimationFrame(()=>composerInput.current?.focus());
+  }
+
+  async function toggleReaction(message:VisibleMessage,emoji:string,action:'add'|'remove'){
+    if(messageActionBusy||message.kind==='deleted')return;
+    setMessageActionBusy(true);setError('');
+    try{
+      await reactToMessage(message.chatId,message.messageId,emoji,action,readyPin);
+      await refreshMessages();
+    }catch(err){setError(friendlyError(err));}
+    finally{setMessageActionBusy(false);}
+  }
 
   async function removeMessage(message:VisibleMessage){
     if(messageActionBusy||message.kind==='deleted')return;
@@ -184,6 +214,15 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
     if(recorder.state!=='inactive')recorder.stop();
   }
 
+  const normalizedSearch=searchQuery.trim().toLocaleLowerCase();
+  const visibleMessages=normalizedSearch
+    ?messages.filter(message=>{
+      if(message.kind==='text')return message.text.toLocaleLowerCase().includes(normalizedSearch)||(message.replyTo?.preview.toLocaleLowerCase().includes(normalizedSearch)??false);
+      if(message.kind==='attachment')return message.fileName.toLocaleLowerCase().includes(normalizedSearch)||(message.replyTo?.preview.toLocaleLowerCase().includes(normalizedSearch)??false);
+      return false;
+    })
+    :messages;
+
   return <section className="chat">
     <header className="chat-header">
       <div>
@@ -192,15 +231,25 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
       </div>
       <ConnectionBadge state={connection}/>
     </header>
+    <div className="chat-search">
+      <span>⌕</span>
+      <input aria-label="Поиск по переписке" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Поиск по сообщениям"/>
+      {searchQuery&&<button type="button" aria-label="Очистить поиск" onClick={()=>setSearchQuery('')}>×</button>}
+    </div>
     <div className="messages">{messages.length===0
       ?<div className="empty-chat"><div className="brand-orb small">F</div><strong>Здесь начнётся ваша переписка</strong><span>Сообщения и вложения защищены сквозным шифрованием.</span></div>
-      :messages.map(m=>{
+      :visibleMessages.length===0
+        ?<div className="empty-chat"><strong>Ничего не найдено</strong><span>Попробуйте другое слово или очистите поиск.</span></div>
+        :visibleMessages.map(m=>{
         const mine=m.senderDeviceId===activeProfile.deviceId;
         return <MessageBubble
           key={m.messageId}
           message={m}
           mine={mine}
+          currentDeviceId={activeProfile.deviceId}
           actionsDisabled={messageActionBusy}
+          onReply={m.kind!=='deleted'?()=>startReply(m):undefined}
+          onReact={m.kind!=='deleted'?(emoji,action)=>void toggleReaction(m,emoji,action):undefined}
           onEdit={mine&&m.kind==='text'?()=>startEdit(m):undefined}
           onDelete={mine&&m.kind!=='deleted'?()=>void removeMessage(m):undefined}
         />;
@@ -211,6 +260,10 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
       {editingMessage&&<div className="composer-editing">
         <div><strong>Редактирование сообщения</strong><span>Изменение увидят все участники чата.</span></div>
         <button type="button" aria-label="Отменить редактирование" onClick={cancelEdit}>×</button>
+      </div>}
+      {replyingTo&&!editingMessage&&<div className="composer-replying">
+        <div><strong>Ответ</strong><span>{replyingTo.preview}</span></div>
+        <button type="button" aria-label="Отменить ответ" onClick={()=>setReplyingTo(null)}>×</button>
       </div>}
       <input ref={fileInput} className="file-input" type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx" onChange={e=>void sendFile(e.target.files?.[0])}/>
       <button type="button" className="attach-button" aria-label="Добавить фото, видео или файл" disabled={!activeChatId||uploading||recording} onClick={()=>fileInput.current?.click()}>＋</button>
