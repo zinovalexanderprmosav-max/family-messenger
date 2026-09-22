@@ -4,19 +4,28 @@ export type ThemeMode='system'|'light'|'dark';
 const KEY='family-messenger-theme';
 
 function savedTheme():ThemeMode{
-  const value=localStorage.getItem(KEY);
-  return value==='light'||value==='dark'||value==='system'?value:'system';
+  try{
+    const value=localStorage.getItem(KEY);
+    return value==='light'||value==='dark'||value==='system'?value:'system';
+  }catch{return 'system';}
+}
+
+function prefersDark(){
+  return typeof window!=='undefined'
+    &&typeof window.matchMedia==='function'
+    &&window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
 function resolved(mode:ThemeMode){
   if(mode!=='system')return mode;
-  return matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+  return prefersDark()?'dark':'light';
 }
 
 function apply(mode:ThemeMode){
-  document.documentElement.dataset.theme=resolved(mode);
+  const value=resolved(mode);
+  document.documentElement.dataset.theme=value;
   document.documentElement.dataset.themeMode=mode;
-  document.documentElement.style.colorScheme=resolved(mode);
+  document.documentElement.style.colorScheme=value;
 }
 
 export function initTheme(){
@@ -26,8 +35,10 @@ export function initTheme(){
 export function ThemeSwitcher({compact=false}:{compact?:boolean}){
   const [mode,setMode]=useState<ThemeMode>(()=>savedTheme());
   useEffect(()=>{
-    apply(mode);localStorage.setItem(KEY,mode);
-    const media=matchMedia('(prefers-color-scheme: dark)');
+    apply(mode);
+    try{localStorage.setItem(KEY,mode);}catch{}
+    if(typeof window==='undefined'||typeof window.matchMedia!=='function')return;
+    const media=window.matchMedia('(prefers-color-scheme: dark)');
     const onChange=()=>{if(mode==='system')apply('system');};
     media.addEventListener?.('change',onChange);
     return()=>media.removeEventListener?.('change',onChange);
