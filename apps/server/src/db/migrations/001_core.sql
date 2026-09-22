@@ -122,6 +122,29 @@ CREATE TABLE IF NOT EXISTS message_envelopes (
 CREATE UNIQUE INDEX IF NOT EXISTS message_id_idempotency ON message_envelopes(message_id);
 CREATE INDEX IF NOT EXISTS message_reconcile_cursor ON message_envelopes(chat_id,sequence);
 
+ALTER TABLE message_envelopes ADD COLUMN IF NOT EXISTS mutation_kind TEXT;
+ALTER TABLE message_envelopes ADD COLUMN IF NOT EXISTS target_message_id UUID;
+DO $ BEGIN
+  ALTER TABLE message_envelopes
+    ADD CONSTRAINT message_envelopes_mutation_kind_check
+    CHECK (mutation_kind IS NULL OR mutation_kind IN ('edit','delete'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $;
+DO $ BEGIN
+  ALTER TABLE message_envelopes
+    ADD CONSTRAINT message_envelopes_mutation_pair_check
+    CHECK (
+      (mutation_kind IS NULL AND target_message_id IS NULL) OR
+      (mutation_kind IS NOT NULL AND target_message_id IS NOT NULL)
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $;
+DO $ BEGIN
+  ALTER TABLE message_envelopes
+    ADD CONSTRAINT message_envelopes_target_message_fk
+    FOREIGN KEY(target_message_id) REFERENCES message_envelopes(message_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $;
+CREATE INDEX IF NOT EXISTS message_mutation_target ON message_envelopes(target_message_id,sequence)
+  WHERE target_message_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS message_attachments (
   attachment_id UUID PRIMARY KEY,
   chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
