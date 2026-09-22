@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {ConnectionBadge} from '../components/ConnectionBadge.js';
 import {MessageBubble} from '../components/MessageBubble.js';
 import {openDirectChat} from '../flows/direct-chat.js';
-import {flushOutbox,readLocalVisibleMessages,reconcileChat,sendAttachmentMessage,sendTextMessage,type VisibleMessage} from '../flows/messages.js';
+import {deleteMessage,editTextMessage,flushOutbox,readLocalVisibleMessages,reconcileChat,sendAttachmentMessage,sendTextMessage,type VisibleMessage,type VisibleTextMessage} from '../flows/messages.js';
 import {connectRealtime} from '../realtime/socket.js';
 import {getUnlockedPin,setUnlockedPin,loadProfile} from '../local/session.js';
 import {unlockDeviceProfile} from '../local/keystore.js';
@@ -13,6 +13,8 @@ function friendlyError(error:unknown){
   if(!(error instanceof Error))return 'Ошибка';
   if(error.message==='video_too_large')return 'Видео больше 20 МБ. Выберите более короткий ролик.';
   if(error.message==='attachment_too_large')return 'Файл больше 20 МБ.';
+  if(error.message==='message_not_owned')return 'Можно изменять и удалять только свои сообщения.';
+  if(error.message==='message_not_found')return 'Сообщение уже недоступно.';
   if(/Permission|NotAllowed/i.test(error.message))return 'Нет доступа к микрофону. Разрешите микрофон для Family Messenger в настройках устройства.';
   return error.message;
 }
@@ -29,12 +31,15 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
   const [activeChatId,setActiveChatId]=useState('');
   const [draft,setDraft]=useState('');
   const [messages,setMessages]=useState<VisibleMessage[]>([]);
+  const [editingMessage,setEditingMessage]=useState<VisibleTextMessage|null>(null);
+  const [messageActionBusy,setMessageActionBusy]=useState(false);
   const [connection,setConnection]=useState<'connecting'|'online'|'offline'>('offline');
   const [error,setError]=useState('');
   const [uploading,setUploading]=useState(false);
   const [recording,setRecording]=useState(false);
   const [recordingSeconds,setRecordingSeconds]=useState(0);
   const fileInput=useRef<HTMLInputElement>(null);
+  const composerInput=useRef<HTMLTextAreaElement>(null);
   const recorderRef=useRef<MediaRecorder|null>(null);
   const recordingStreamRef=useRef<MediaStream|null>(null);
   const chunksRef=useRef<Blob[]>([]);
@@ -98,10 +103,41 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
   async function refreshMessages(){if(activeChatId)setMessages(await readLocalVisibleMessages(activeChatId,readyPin));}
 
   async function send(e:React.FormEvent){
-    e.preventDefault();const text=draft.trim();if(!text||!activeChatId)return;
+    e.preventDefault();const text=draft.trim();if(!text||!activeChatId||messageActionBusy)return;
+    if(editingMessage){
+      const original=editingMessage;
+      if(text===original.text){setEditingMessage(null);setDraft('');return;}
+      setMessageActionBusy(true);setDraft('');
+      try{
+        await editTextMessage(original.chatId,original.messageId,text,readyPin);
+        setEditingMessage(null);await refreshMessages();setError('');
+      }catch(err){
+        setError(friendlyError(err));setDraft(text);
+      }finally{setMessageActionBusy(false);}
+      return;
+    }
     setDraft('');
     try{await sendTextMessage(text,readyPin,activeChatId);await refreshMessages();setError('');}
     catch(err){setError(friendlyError(err));setDraft(text);await refreshMessages();}
+  }
+
+  function startEdit(message:VisibleTextMessage){
+    setEditingMessage(message);setDraft(message.text);setError('');
+    window.requestAnimationFrame(()=>composerInput.current?.focus());
+  }
+
+  function cancelEdit(){setEditingMessage(null);setDraft('');}
+
+  async function removeMessage(message:VisibleMessage){
+    if(messageActionBusy||message.kind==='deleted')return;
+    if(!window.confirm('Удалить это сообщение у всех участников чата?'))return;
+    setMessageActionBusy(true);setError('');
+    try{
+      await deleteMessage(message.chatId,message.messageId,readyPin);
+      if(editingMessage?.messageId===message.messageId)cancelEdit();
+      await refreshMessages();
+    }catch(err){setError(friendlyError(err));}
+    finally{setMessageActionBusy(false);}
   }
 
   async function sendFile(file:File|undefined){
@@ -158,17 +194,31 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
     </header>
     <div className="messages">{messages.length===0
       ?<div className="empty-chat"><div className="brand-orb small">F</div><strong>Здесь начнётся ваша переписка</strong><span>Сообщения и вложения защищены сквозным шифрованием.</span></div>
-      :messages.map(m=><MessageBubble key={m.messageId} message={m} mine={m.senderDeviceId===activeProfile.deviceId}/>)}</div>
+      :messages.map(m=>{
+        const mine=m.senderDeviceId===activeProfile.deviceId;
+        return <MessageBubble
+          key={m.messageId}
+          message={m}
+          mine={mine}
+          actionsDisabled={messageActionBusy}
+          onEdit={mine&&m.kind==='text'?()=>startEdit(m):undefined}
+          onDelete={mine&&m.kind!=='deleted'?()=>void removeMessage(m):undefined}
+        />;
+      })}</div>
     {recording&&<div className="recording-banner"><span className="record-dot"/>Запись голоса {formatDuration(recordingSeconds)}</div>}
     {error&&<div className="error-inline">{error}</div>}
     <form className="composer" onSubmit={send}>
+      {editingMessage&&<div className="composer-editing">
+        <div><strong>Редактирование сообщения</strong><span>Изменение увидят все участники чата.</span></div>
+        <button type="button" aria-label="Отменить редактирование" onClick={cancelEdit}>×</button>
+      </div>}
       <input ref={fileInput} className="file-input" type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx" onChange={e=>void sendFile(e.target.files?.[0])}/>
       <button type="button" className="attach-button" aria-label="Добавить фото, видео или файл" disabled={!activeChatId||uploading||recording} onClick={()=>fileInput.current?.click()}>＋</button>
       {recording
         ?<button type="button" className="voice-button recording" aria-label="Остановить и отправить голосовое" onClick={()=>stopRecording(true)}>■</button>
         :<button type="button" className="voice-button" aria-label="Записать голосовое" disabled={!activeChatId||uploading} onClick={()=>void startRecording()}>●</button>}
-      <textarea aria-label="Сообщение" value={draft} onChange={e=>setDraft(e.target.value)} placeholder={recording?'Идёт запись…':selectedMember?`Сообщение ${selectedMember.displayName}`:'Сообщение семье'} rows={1} disabled={recording}/>
-      <button className="send" aria-label="Отправить" disabled={!activeChatId||uploading||recording||!draft.trim()}>➤</button>
+      <textarea ref={composerInput} aria-label={editingMessage?'Редактировать сообщение':'Сообщение'} value={draft} onChange={e=>setDraft(e.target.value)} placeholder={editingMessage?'Измените текст сообщения':recording?'Идёт запись…':selectedMember?`Сообщение ${selectedMember.displayName}`:'Сообщение семье'} rows={1} disabled={recording||messageActionBusy}/>
+      <button className="send" aria-label={editingMessage?'Сохранить изменения':'Отправить'} disabled={!activeChatId||uploading||recording||messageActionBusy||!draft.trim()}>{editingMessage?'✓':'➤'}</button>
     </form>
   </section>;
 }
