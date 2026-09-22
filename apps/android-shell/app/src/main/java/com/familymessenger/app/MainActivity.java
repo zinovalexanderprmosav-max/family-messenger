@@ -46,6 +46,7 @@ public final class MainActivity extends Activity {
 
     private WebView webView;
     private LinearLayout onboarding;
+    private LinearLayout topBar;
     private ValueCallback<Uri[]> fileCallback;
     private PermissionRequest pendingAudioPermission;
     private SharedPreferences preferences;
@@ -71,6 +72,7 @@ public final class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(244, 248, 247));
 
         LinearLayout bar = new LinearLayout(this);
+        topBar = bar;
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(16), dp(6), dp(8), dp(6));
@@ -366,11 +368,13 @@ public final class MainActivity extends Activity {
     }
 
     private void showOnboarding() {
+        if (topBar != null) topBar.setVisibility(View.VISIBLE);
         onboarding.setVisibility(View.VISIBLE);
         webView.setVisibility(View.GONE);
     }
 
     private void showWeb() {
+        if (topBar != null) topBar.setVisibility(View.GONE);
         onboarding.setVisibility(View.GONE);
         webView.setVisibility(View.VISIBLE);
     }
