@@ -12,6 +12,7 @@ import { FamilyChatScreen } from './screens/FamilyChatScreen.js';
 import { AdminScreen } from './screens/AdminScreen.js';
 import { DeviceManagementScreen } from './screens/DeviceManagementScreen.js';
 import { FamilyContacts,type FamilyContact } from './components/FamilyContacts.js';
+import { BuildInfo } from './components/BuildInfo.js';
 import type { LocalProfile } from './local/db.js';
 
 type FamilySummary={primaryAdminMemberId:string|null;members:FamilyContact[]};
@@ -51,7 +52,7 @@ export default function App(){
     <div className="side-stack">
       {family&&<FamilyContacts members={family.members} currentMemberId={profile.memberId} selectedMemberId={selectedMember?.id??null} onSelectMember={setSelectedMember}/>}
       <DeviceManagementScreen/>
-      {role==='admin'&&family&&<AdminScreen family={family} currentMemberId={profile.memberId} onChanged={()=>setFamilyRefresh(value=>value+1)}/>}
+      {role==='admin'&&family&&<AdminScreen family={family} currentMemberId={profile.memberId} onChanged={()=>setFamilyRefresh(value=>value+1)}/>}\n      <BuildInfo/>
     </div>
   </div>;
 }

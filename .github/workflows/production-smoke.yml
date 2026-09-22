@@ -1,12 +1,12 @@
-name: Production Image Smoke
+name: Release Production Smoke
 
 on:
   push:
     branches:
-      - feat/phase3c8-production-deploy
+      - release/0.3.8-rc1
   pull_request:
     branches:
-      - feat/phase3c7-android-apk-pwa-release
+      - feat/phase3c8-production-deploy
 
 jobs:
   docker-smoke:
@@ -28,20 +28,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build production image
-        run: docker build -t family-messenger:smoke .
+        run: docker build -t family-messenger:rc1 .
       - name: Start production image
         run: |
-          docker run -d --name family-messenger-smoke --network host             -e PORT=10000             -e NODE_ENV=production             -e DATABASE_URL=postgres://family:family-dev-only@127.0.0.1:5432/family             family-messenger:smoke
-      - name: Verify health endpoint
+          docker run -d --name family-messenger-rc1 --network host \
+            -e PORT=10000 \
+            -e NODE_ENV=production \
+            -e APP_VERSION=0.3.8-rc1 \
+            -e DATABASE_URL=postgres://family:family-dev-only@127.0.0.1:5432/family \
+            family-messenger:rc1
+      - name: Verify health and release version
         run: |
           for i in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:10000/health | grep -q '"status":"ok"'; then
+            if curl --fail --silent http://127.0.0.1:10000/health | grep -q '"status":"ok"' \
+              && curl --fail --silent http://127.0.0.1:10000/v1/about | grep -q '"version":"0.3.8-rc1"'; then
               exit 0
             fi
             sleep 1
           done
-          docker logs family-messenger-smoke
+          docker logs family-messenger-rc1
           exit 1
       - name: Stop container
         if: always()
-        run: docker rm -f family-messenger-smoke || true
+        run: docker rm -f family-messenger-rc1 || true

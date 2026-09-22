@@ -1,12 +1,12 @@
-name: Android APK
+name: Release Android APK
 
 on:
   push:
     branches:
-      - feat/phase3c7-android-apk-pwa-release
+      - release/0.3.8-rc1
   pull_request:
     branches:
-      - feat/phase3c6-e2ee-attachments
+      - feat/phase3c8-production-deploy
 
 jobs:
   build-apk:
@@ -25,9 +25,9 @@ jobs:
       - name: Prepare artifact
         run: |
           mkdir -p artifacts
-          cp apps/android-shell/app/build/outputs/apk/debug/app-debug.apk artifacts/FamilyMessenger-debug.apk
+          cp apps/android-shell/app/build/outputs/apk/debug/app-debug.apk artifacts/FamilyMessenger-0.3.8-rc1.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: FamilyMessenger-debug-apk
-          path: artifacts/FamilyMessenger-debug.apk
+          name: FamilyMessenger-0.3.8-rc1-apk
+          path: artifacts/FamilyMessenger-0.3.8-rc1.apk
           if-no-files-found: error

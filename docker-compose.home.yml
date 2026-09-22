@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: family
+      POSTGRES_PASSWORD: family-home-test
+      POSTGRES_DB: family
+    volumes:
+      - family_home_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U family -d family"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      APP_VERSION: 0.3.8-rc1
+      PORT: 10000
+      DATABASE_URL: postgres://family:family-home-test@db:5432/family
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "10000:10000"
+
+volumes:
+  family_home_db:

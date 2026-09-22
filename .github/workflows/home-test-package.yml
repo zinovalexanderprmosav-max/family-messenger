@@ -1,0 +1,23 @@
+name: Release Home Test Package
+
+on:
+  push:
+    branches:
+      - release/0.3.8-rc1
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package Windows home test
+        run: |
+          mkdir -p artifacts/home-test
+          git archive --format=tar HEAD | tar -x -C artifacts/home-test
+          rm -rf artifacts/home-test/.github
+          (cd artifacts && zip -r FamilyMessenger-0.3.8-rc1-Home-Test-Windows.zip home-test)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FamilyMessenger-0.3.8-rc1-Home-Test-Windows
+          path: artifacts/FamilyMessenger-0.3.8-rc1-Home-Test-Windows.zip
+          if-no-files-found: error

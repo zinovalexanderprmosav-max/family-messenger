@@ -28,6 +28,7 @@ export async function buildApp(options:{skipDatabase?:boolean;pool?:DatabasePool
   await app.register(rateLimit,{max:120,timeWindow:'1 minute'});
   await app.register(websocket);
   app.get('/health',async()=>({status:'ok' as const,service:'family-messenger-server' as const}));
+  app.get('/v1/about',async()=>({service:'family-messenger-server' as const,version:config.appVersion,serverTime:new Date().toISOString()}));
   if(!options.skipDatabase){
     const pool=options.pool??createPool(config.databaseUrl); if(!options.pool)app.addHook('onClose',async()=>{await pool.end();});
     await migrate(pool);

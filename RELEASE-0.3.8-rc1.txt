@@ -1,0 +1,2 @@
+Family Messenger 0.3.8-rc1
+Home-test release candidate with named one-time QR onboarding for Android, iPhone PWA, E2EE attachments, device/member management, and production Docker deployment.

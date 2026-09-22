@@ -8,10 +8,13 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -24,12 +27,21 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.security.SecureRandom;
+
+import com.google.mlkit.vision.barcode.common.Barcode;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanner;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
+
 public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1001;
     private static final String PREFS = "family_messenger";
     private static final String PREF_SERVER_URL = "server_url";
+    private static final String PREF_AUTO_PIN = "auto_pin";
 
     private WebView webView;
+    private LinearLayout onboarding;
     private ValueCallback<Uri[]> fileCallback;
     private SharedPreferences preferences;
 
@@ -41,8 +53,9 @@ public final class MainActivity extends Activity {
 
         String savedUrl = preferences.getString(PREF_SERVER_URL, "");
         if (savedUrl == null || savedUrl.isBlank()) {
-            showServerDialog(true);
+            showOnboarding();
         } else {
+            showWeb();
             loadServer(savedUrl);
         }
     }
@@ -68,18 +81,79 @@ public final class MainActivity extends Activity {
         Button settings = new Button(this);
         settings.setText("⚙");
         settings.setTextSize(20);
-        settings.setContentDescription("Сменить адрес сервера");
-        settings.setOnClickListener(v -> showServerDialog(false));
+        settings.setContentDescription("Настройки подключения");
+        settings.setOnClickListener(v -> showConnectionMenu());
         bar.addView(settings, new LinearLayout.LayoutParams(dp(52), dp(44)));
 
         root.addView(bar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        onboarding = createOnboardingView();
+        root.addView(onboarding, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
         webView = new WebView(this);
         configureWebView();
+        webView.setVisibility(View.GONE);
         root.addView(webView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         return root;
+    }
+
+    private LinearLayout createOnboardingView() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        box.setPadding(dp(28), dp(32), dp(28), dp(32));
+
+        TextView mark = new TextView(this);
+        mark.setText("F");
+        mark.setTextSize(34);
+        mark.setTextColor(Color.WHITE);
+        mark.setGravity(Gravity.CENTER);
+        mark.setBackgroundColor(Color.rgb(53, 127, 112));
+        box.addView(mark, new LinearLayout.LayoutParams(dp(76), dp(76)));
+
+        TextView heading = new TextView(this);
+        heading.setText("Подключиться к семье");
+        heading.setTextSize(25);
+        heading.setTextColor(Color.rgb(38, 53, 50));
+        heading.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        headingParams.setMargins(0, dp(28), 0, dp(10));
+        box.addView(heading, headingParams);
+
+        TextView hint = new TextView(this);
+        hint.setText("Нажмите кнопку и наведите камеру на QR-код, который показал администратор семьи.");
+        hint.setTextSize(16);
+        hint.setTextColor(Color.rgb(99, 120, 115));
+        hint.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        hintParams.setMargins(0, 0, 0, dp(24));
+        box.addView(hint, hintParams);
+
+        Button scan = new Button(this);
+        scan.setText("Сканировать QR-код");
+        scan.setTextSize(18);
+        scan.setTextColor(Color.WHITE);
+        scan.setBackgroundColor(Color.rgb(53, 127, 112));
+        scan.setOnClickListener(v -> scanFamilyQr());
+        box.addView(scan, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(58)));
+
+        TextView manual = new TextView(this);
+        manual.setText("Если камера не сработала — открыть ручную настройку");
+        manual.setTextSize(13);
+        manual.setTextColor(Color.rgb(82, 117, 108));
+        manual.setGravity(Gravity.CENTER);
+        manual.setPadding(0, dp(22), 0, dp(8));
+        manual.setOnClickListener(v -> showServerDialog(false));
+        box.addView(manual, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        return box;
     }
 
     private void configureWebView() {
@@ -91,6 +165,8 @@ public final class MainActivity extends Activity {
         settings.setAllowContentAccess(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+
+        webView.addJavascriptInterface(new NativeBridge(), "FamilyMessengerNative");
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
@@ -128,11 +204,86 @@ public final class MainActivity extends Activity {
                     return true;
                 } catch (ActivityNotFoundException error) {
                     fileCallback = null;
-                    Toast.makeText(MainActivity.this, "На устройстве нет приложения для выбора файла", Toast.LENGTH_LONG).show();
+                    Toast.makeText(MainActivity.this, "Не удалось открыть выбор файла", Toast.LENGTH_LONG).show();
                     return false;
                 }
             }
         });
+    }
+
+    private void scanFamilyQr() {
+        GmsBarcodeScannerOptions options = new GmsBarcodeScannerOptions.Builder()
+                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                .enableAutoZoom()
+                .build();
+        GmsBarcodeScanner scanner = GmsBarcodeScanning.getClient(this, options);
+        scanner.startScan()
+                .addOnSuccessListener(barcode -> handleScannedQr(barcode.getRawValue()))
+                .addOnCanceledListener(() -> Toast.makeText(this, "Сканирование отменено", Toast.LENGTH_SHORT).show())
+                .addOnFailureListener(error -> {
+                    Toast.makeText(this, "Не удалось открыть сканер QR", Toast.LENGTH_LONG).show();
+                    showServerDialog(false);
+                });
+    }
+
+    private void handleScannedQr(String rawValue) {
+        Uri uri;
+        try {
+            uri = Uri.parse(rawValue == null ? "" : rawValue.trim());
+        } catch (Exception error) {
+            showInvalidQr();
+            return;
+        }
+
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+        String fragment = uri.getFragment();
+        boolean validRoute = fragment != null &&
+                (fragment.startsWith("/join?token=") || fragment.startsWith("/device?token="));
+
+        if (!"https".equalsIgnoreCase(scheme) || host == null || !validRoute) {
+            showInvalidQr();
+            return;
+        }
+
+        Uri origin = new Uri.Builder()
+                .scheme("https")
+                .encodedAuthority(uri.getEncodedAuthority())
+                .build();
+        String serverUrl = origin.toString();
+
+        preferences.edit().putString(PREF_SERVER_URL, serverUrl).apply();
+        showWeb();
+        webView.loadUrl(uri.toString());
+    }
+
+    private void showInvalidQr() {
+        new AlertDialog.Builder(this)
+                .setTitle("Это не QR Family Messenger")
+                .setMessage("Попросите администратора открыть «Пригласить нового участника» и отсканируйте QR-код из приложения.")
+                .setPositiveButton("Сканировать ещё раз", (d, which) -> scanFamilyQr())
+                .setNegativeButton("Закрыть", null)
+                .show();
+    }
+
+    private void showConnectionMenu() {
+        String saved = preferences.getString(PREF_SERVER_URL, "");
+        String[] items = saved == null || saved.isBlank()
+                ? new String[]{"Сканировать QR-код", "Ручная настройка"}
+                : new String[]{"Сканировать новый QR-код", "Открыть Family Messenger", "Ручная настройка"};
+        new AlertDialog.Builder(this)
+                .setTitle("Подключение")
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) {
+                        scanFamilyQr();
+                    } else if (saved != null && !saved.isBlank() && which == 1) {
+                        showWeb();
+                        loadServer(saved);
+                    } else {
+                        showServerDialog(false);
+                    }
+                })
+                .show();
     }
 
     private void showServerDialog(boolean required) {
@@ -150,8 +301,8 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Адрес Family Messenger")
-                .setMessage("Введите HTTPS-адрес вашего сервера. Он сохранится только на этом устройстве.")
+                .setTitle("Ручная настройка")
+                .setMessage("Используйте её только если QR-сканирование недоступно.")
                 .setView(holder)
                 .setCancelable(!required)
                 .setNegativeButton(required ? "Закрыть" : "Отмена", (d, which) -> {
@@ -168,6 +319,7 @@ public final class MainActivity extends Activity {
             }
             preferences.edit().putString(PREF_SERVER_URL, normalized).apply();
             dialog.dismiss();
+            showWeb();
             loadServer(normalized);
         }));
         dialog.show();
@@ -185,7 +337,18 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void showOnboarding() {
+        onboarding.setVisibility(View.VISIBLE);
+        webView.setVisibility(View.GONE);
+    }
+
+    private void showWeb() {
+        onboarding.setVisibility(View.GONE);
+        webView.setVisibility(View.VISIBLE);
+    }
+
     private void loadServer(String serverUrl) {
+        showWeb();
         webView.loadUrl(serverUrl + "/");
     }
 
@@ -212,8 +375,14 @@ public final class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
+        if (webView != null && webView.getVisibility() == View.VISIBLE && webView.canGoBack()) {
+            webView.goBack();
+        } else if (webView != null && webView.getVisibility() == View.VISIBLE &&
+                (preferences.getString(PREF_SERVER_URL, "") == null || preferences.getString(PREF_SERVER_URL, "").isBlank())) {
+            showOnboarding();
+        } else {
+            super.onBackPressed();
+        }
     }
 
     @Override
@@ -225,6 +394,30 @@ public final class MainActivity extends Activity {
             webView.destroy();
         }
         super.onDestroy();
+    }
+
+    private String getOrCreateAutoPin() {
+        String existing = preferences.getString(PREF_AUTO_PIN, "");
+        if (existing != null && existing.matches("\\d{18,}")) return existing;
+        SecureRandom random = new SecureRandom();
+        StringBuilder value = new StringBuilder();
+        for (int i = 0; i < 24; i++) value.append(random.nextInt(10));
+        String generated = value.toString();
+        preferences.edit().putString(PREF_AUTO_PIN, generated).apply();
+        return generated;
+    }
+
+    private final class NativeBridge {
+        @JavascriptInterface
+        public String getAutoPin() {
+            return getOrCreateAutoPin();
+        }
+
+        @JavascriptInterface
+        public String getDeviceName() {
+            String model = Build.MODEL == null ? "" : Build.MODEL.trim();
+            return model.isEmpty() ? "Android телефон" : model;
+        }
     }
 
     private int dp(int value) {
