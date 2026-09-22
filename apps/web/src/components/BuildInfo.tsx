@@ -17,7 +17,7 @@ export function BuildInfo(){
     return()=>{stopped=true;};
   },[]);
   return <aside className="build-info" aria-label="Информация о сборке">
-    <strong>Family Messenger {about?.version??'0.4.2'}</strong>
+    <strong>Family Messenger {about?.version??'0.5.0'}</strong>
     <span>{location.host||'локальный запуск'}</span>
     {about?<span>Сервер отвечает · {new Date(about.serverTime).toLocaleString()}</span>:<span>{error?'Сервер недоступен':'Проверяем сервер…'}</span>}
   </aside>;
