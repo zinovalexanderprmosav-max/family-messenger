@@ -95,9 +95,9 @@ export default function App(){
       <div className={mobileView==='chat'?'mobile-pane active':'mobile-pane'}>
         <FamilyChatScreen selectedMember={selectedMember}/>
       </div>
-      <div className={mobileView==='assistant'?'mobile-pane active assistant-pane':'mobile-pane assistant-pane'}>
+      {mobileView==='assistant'&&<div className="mobile-pane active assistant-pane">
         <AssistantScreen/>
-      </div>
+      </div>}
       <aside className="side-stack">
         {family&&<div className={mobileView==='contacts'?'mobile-pane active':'mobile-pane desktop-visible'}>
           <FamilyContacts members={family.members} currentMemberId={profile.memberId} selectedMemberId={selectedMember?.id??null} onSelectMember={pickMember}/>
