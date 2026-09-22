@@ -18,28 +18,23 @@ function inviteError(reply: import('fastify').FastifyReply,error:unknown){
 
 export async function registerInvitationRoutes(app:FastifyInstance,pool:DatabasePool,production:boolean){
   app.post('/v1/invitations',async(request,reply)=>{
+    const input=CreateInvitationRequest.parse(request.body??{});
     const principal=await requireSession(request,pool); requireCsrf(request,principal);
     if(principal.deviceStatus!=='active') return reply.code(403).send({error:'device_not_active'});
-    const createInput=CreateInvitationRequest.parse(request.body??{});
     const tx=await pool.connect();
     try{
       await tx.query('BEGIN');
       await lockFamily(tx,principal.familyId);await assertActiveActor(tx,principal);
-      const admin=await tx.query("SELECT 1 FROM family_memberships WHERE family_id=$1 AND member_id=$2 AND role='admin' AND status='active'",[principal.familyId,principal.memberId]);
+      const admin=await tx.query(`SELECT 1 FROM family_memberships WHERE family_id=$1 AND member_id=$2 AND role='admin' AND status='active'`,[principal.familyId,principal.memberId]);
       if(!admin.rowCount){await tx.query('ROLLBACK');return reply.code(403).send({error:'administrator_required'});}
       const joinToken=randomBytes(32).toString('base64url'); const expiresAt=new Date(Date.now()+15*60*1000);
       const invitation=await createInvitation(tx,{
         familyId:principal.familyId,createdByDeviceId:principal.deviceId,tokenHash:tokenHash(joinToken),expiresAt,
-        ...(createInput.memberDisplayName!==undefined?{intendedMemberDisplayName:createInput.memberDisplayName}:{})
+        ...(input.memberDisplayName!==undefined?{intendedMemberDisplayName:input.memberDisplayName}:{})
       });
-      await appendAuditEvent(tx,{familyId:principal.familyId,actorDeviceId:principal.deviceId,eventType:'invitation.created',details:{
-        invitationId:invitation.id,expiresAt:invitation.expiresAt,intendedMemberDisplayName:invitation.intendedMemberDisplayName
-      }});
+      await appendAuditEvent(tx,{familyId:principal.familyId,actorDeviceId:principal.deviceId,eventType:'invitation.created',details:{invitationId:invitation.id,expiresAt:invitation.expiresAt,intendedMemberDisplayName:invitation.intendedMemberDisplayName}});
       await tx.query('COMMIT');
-      return reply.code(201).send({
-        invitationId:invitation.id,joinToken,expiresAt:invitation.expiresAt,
-        intendedMemberDisplayName:invitation.intendedMemberDisplayName
-      });
+      return reply.code(201).send({invitationId:invitation.id,joinToken,expiresAt:invitation.expiresAt,intendedMemberDisplayName:invitation.intendedMemberDisplayName});
     }catch(error){await tx.query('ROLLBACK');throw error;}finally{tx.release();}
   });
 
@@ -52,12 +47,7 @@ export async function registerInvitationRoutes(app:FastifyInstance,pool:Database
     const input=AcceptInvitationRequest.parse(request.body); const tx=await pool.connect();
     try{
       await tx.query('BEGIN');
-      const enrollment=await consumeInvitation(tx,tokenHash(input.joinToken),{
-        deviceName:input.deviceName,
-        encryptionPublicKey:input.encryptionPublicKey,
-        signingPublicKey:input.signingPublicKey,
-        ...(input.memberDisplayName!==undefined?{memberDisplayName:input.memberDisplayName}:{})
-      });
+      const enrollment=await consumeInvitation(tx,tokenHash(input.joinToken),input);
       const session=await createSession(tx,{deviceId:enrollment.deviceId,memberId:enrollment.memberId,familyId:enrollment.familyId});
       await appendAuditEvent(tx,{familyId:enrollment.familyId,actorDeviceId:enrollment.deviceId,eventType:'invitation.accepted'});
       await tx.query('COMMIT'); setSessionCookie(reply,session.token,production);
