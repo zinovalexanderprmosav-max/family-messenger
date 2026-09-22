@@ -121,7 +121,8 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
     setDraft('');
     const reply=replyingTo;
     try{
-      await sendTextMessage(text,readyPin,activeChatId,reply??undefined);
+      if(reply)await sendTextMessage(text,readyPin,activeChatId,reply);
+      else await sendTextMessage(text,readyPin,activeChatId);
       setReplyingTo(null);await refreshMessages();setError('');
     }
     catch(err){setError(friendlyError(err));setDraft(text);setReplyingTo(reply);await refreshMessages();}
