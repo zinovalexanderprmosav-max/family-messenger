@@ -10,7 +10,7 @@ export type AttachmentMessagePayload = {
   fileName:string;
   mimeType:string;
   size:number;
-  mediaKind:'image'|'video'|'file';
+  mediaKind:'image'|'video'|'audio'|'file';
   sentAt:string;
 };
 export type MessagePayload=TextMessagePayload|AttachmentMessagePayload;
@@ -75,7 +75,7 @@ export async function decryptMessagePayload(envelope:EncryptedMessageEnvelope,ke
       &&typeof parsed.size==='number'
       &&Number.isFinite(parsed.size)
       &&parsed.size>=0
-      &&(parsed.mediaKind==='image'||parsed.mediaKind==='video'||parsed.mediaKind==='file')
+      &&(parsed.mediaKind==='image'||parsed.mediaKind==='video'||parsed.mediaKind==='audio'||parsed.mediaKind==='file')
       &&typeof parsed.sentAt==='string'
     )return parsed as AttachmentMessagePayload;
     throw new Error('invalid_message_payload');
