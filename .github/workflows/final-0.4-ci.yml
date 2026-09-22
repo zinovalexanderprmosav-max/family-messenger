@@ -1,9 +1,9 @@
-name: Family Messenger 0.4 Final CI
+name: Family Messenger 0.4.1 Recovery CI
 
 on:
   push:
     branches:
-      - release/0.4.0-final
+      - release/0.4.1-recovery-backup
 
 jobs:
   full-project:
@@ -26,7 +26,7 @@ jobs:
       DATABASE_URL: postgres://family:family-dev-only@127.0.0.1:5432/family
       TEST_DATABASE_URL: postgres://family:family-dev-only@127.0.0.1:5432/family
       NODE_ENV: test
-      APP_VERSION: 0.4.0-final
+      APP_VERSION: 0.4.1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,9 +43,9 @@ jobs:
         run: |
           mkdir -p artifacts/iphone-pwa
           cp -R apps/web/dist/. artifacts/iphone-pwa/
-          (cd artifacts && zip -r FamilyMessenger-0.4.0-final-iPhone-PWA.zip iphone-pwa)
+          (cd artifacts && zip -r FamilyMessenger-0.4.1-iPhone-PWA.zip iphone-pwa)
       - uses: actions/upload-artifact@v4
         with:
-          name: FamilyMessenger-0.4.0-final-iPhone-PWA
-          path: artifacts/FamilyMessenger-0.4.0-final-iPhone-PWA.zip
+          name: FamilyMessenger-0.4.1-iPhone-PWA
+          path: artifacts/FamilyMessenger-0.4.1-iPhone-PWA.zip
           if-no-files-found: error
