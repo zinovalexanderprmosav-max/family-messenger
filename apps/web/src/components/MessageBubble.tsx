@@ -100,7 +100,7 @@ function AttachmentContent({message}:{message:VisibleAttachmentMessage}){
 export function MessageBubble({
   message,mine,onEdit,onDelete,actionsDisabled=false
 }:{
-  message:VisibleMessage;mine:boolean;onEdit?:()=>void;onDelete?:()=>void;actionsDisabled?:boolean;
+  message:VisibleMessage;mine:boolean;onEdit?:(()=>void)|undefined;onDelete?:(()=>void)|undefined;actionsDisabled?:boolean|undefined;
 }){
   const [menuOpen,setMenuOpen]=useState(false);
   const canAct=mine&&message.kind!=='deleted'&&(onEdit||onDelete);
