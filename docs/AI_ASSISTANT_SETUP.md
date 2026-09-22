@@ -1,45 +1,19 @@
 # Family Messenger 0.5.0 — AI setup
 
-## Режимы
+Family Messenger использует один серверный ИИ-провайдер: OpenRouter Free.
 
-Family Messenger поддерживает три режима:
+Секретный ключ хранится только на backend Render. В Web/PWA/APK ключ не встраивается.
 
-- `auto` — сначала Ollama, при недоступности переходит на OpenRouter.
-- `ollama` — только локальная модель.
-- `openrouter` — только OpenRouter.
-
-Секреты хранятся только на backend. В Web/PWA/APK ключи не встраиваются.
-
-## OpenRouter
-
-Переменные backend:
+## Переменные Render
 
 ```
 OPENROUTER_API_KEY=<secret>
 OPENROUTER_MODEL=openrouter/free
 ```
 
-Для production задавайте `OPENROUTER_API_KEY` как secret/environment variable хостинга. Никогда не коммитьте ключ в Git.
+`OPENROUTER_API_KEY` задаётся как Environment Variable в Render и никогда не коммитится в Git.
 
-## Ollama
-
-По умолчанию:
-
-```
-OLLAMA_MODEL=qwen3:4b
-```
-
-Готовый локальный стек находится в `deploy/ollama/docker-compose.yml`.
-
-Если backend работает на том же Docker-хосте и находится в одной сети:
-
-```
-OLLAMA_BASE_URL=http://ollama:11434
-```
-
-Если backend остаётся на Render, не открывайте порт Ollama 11434 напрямую в интернет. Используйте защищённый HTTPS-шлюз/туннель и указывайте его адрес как `OLLAMA_BASE_URL`.
-
-## Проверка API
+## Проверка
 
 После входа Family Messenger:
 
@@ -47,11 +21,6 @@ OLLAMA_BASE_URL=http://ollama:11434
 GET /v1/assistant/status
 ```
 
-Ответ показывает только configured/model и не раскрывает секреты.
+Ответ показывает только состояние подключения и модель, без секретного ключа.
 
-Вкладка «Помощник» позволяет выбрать:
-- Авто
-- Локальный Ollama
-- OpenRouter Free
-
-В режиме Auto локальный провайдер имеет приоритет.
+В приложении вкладка «Помощник» использует OpenRouter Free автоматически — выбирать провайдера пользователю не нужно.
