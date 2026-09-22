@@ -97,12 +97,33 @@ function AttachmentContent({message}:{message:VisibleAttachmentMessage}){
   </div>;
 }
 
-export function MessageBubble({message,mine}:{message:VisibleMessage;mine:boolean}){
-  return <article className={`message ${mine?'mine':''}`}>
+export function MessageBubble({
+  message,mine,onEdit,onDelete,actionsDisabled=false
+}:{
+  message:VisibleMessage;mine:boolean;onEdit?:(()=>void)|undefined;onDelete?:(()=>void)|undefined;actionsDisabled?:boolean|undefined;
+}){
+  const [menuOpen,setMenuOpen]=useState(false);
+  const canAct=mine&&message.kind!=='deleted'&&(onEdit||onDelete);
+
+  return <article className={`message ${mine?'mine':''} ${message.kind==='deleted'?'message-deleted':''}`}>
     <div className="message-meta">
-      {mine?'Вы':'Семья'} · {new Date(message.sentAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
-      {mine&&<span className={`message-status status-${message.deliveryStatus??'sent'}`}> · {statusText(message.deliveryStatus)}</span>}
+      <span>
+        {mine?'Вы':'Семья'} · {new Date(message.sentAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+        {message.editedAt&&<span className="message-edited"> · изменено</span>}
+        {mine&&<span className={`message-status status-${message.deliveryStatus??'sent'}`}> · {statusText(message.deliveryStatus)}</span>}
+      </span>
+      {canAct&&<div className="message-actions">
+        <button type="button" className="message-menu-button" aria-label="Действия с сообщением" aria-expanded={menuOpen} disabled={actionsDisabled} onClick={()=>setMenuOpen(value=>!value)}>⋯</button>
+        {menuOpen&&<div className="message-menu" role="menu">
+          {message.kind==='text'&&onEdit&&<button type="button" role="menuitem" onClick={()=>{setMenuOpen(false);onEdit();}}>Редактировать</button>}
+          {onDelete&&<button type="button" role="menuitem" className="message-menu-danger" onClick={()=>{setMenuOpen(false);onDelete();}}>Удалить</button>}
+        </div>}
+      </div>}
     </div>
-    {message.kind==='text'?<TextContent text={message.text}/>:<AttachmentContent message={message}/>}
+    {message.kind==='text'
+      ?<TextContent text={message.text}/>
+      :message.kind==='attachment'
+        ?<AttachmentContent message={message}/>
+        :<div className="deleted-message-text">Сообщение удалено</div>}
   </article>;
 }

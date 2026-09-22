@@ -87,13 +87,19 @@ export const EncryptedAttachmentSchema = z.object({
   ciphertext: Base64
 });
 
+export const MessageMutationSchema = z.object({
+  kind: z.enum(['edit','delete']),
+  targetMessageId: Id
+});
+
 export const EncryptedMessageEnvelopeSchema = z.object({
   messageId: Id,
   chatId: Id,
   senderDeviceId: Id,
   keyVersion: z.number().int().positive(),
   nonce: Base64,
-  ciphertext: Base64
+  ciphertext: Base64,
+  mutation: MessageMutationSchema.optional()
 });
 
 export const StoredMessageEnvelopeSchema = EncryptedMessageEnvelopeSchema.extend({
@@ -119,6 +125,7 @@ export type KeyRotationDevice = z.infer<typeof KeyRotationDeviceSchema>;
 export type KeyRotationStatusResponse = z.infer<typeof KeyRotationStatusResponseSchema>;
 export type CompleteKeyRotationRequest = z.infer<typeof CompleteKeyRotationRequestSchema>;
 export type EncryptedAttachment = z.infer<typeof EncryptedAttachmentSchema>;
+export type MessageMutation = z.infer<typeof MessageMutationSchema>;
 export type EncryptedMessageEnvelope = z.infer<typeof EncryptedMessageEnvelopeSchema>;
 export type StoredMessageEnvelope = z.infer<typeof StoredMessageEnvelopeSchema>;
 export type RealtimeEvent = z.infer<typeof RealtimeEventSchema>;

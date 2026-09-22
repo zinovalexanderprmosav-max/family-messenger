@@ -9,14 +9,20 @@ import { rotateChatKey, syncCurrentChatKey } from './key-rotation.js';
 
 export type DeliveryStatus='queued'|'sending'|'failed'|'sent';
 type VisibleBase={
-  messageId:string;sentAt:string;senderDeviceId:string;sequence:string;chatId:string;deliveryStatus?:DeliveryStatus;
+  messageId:string;sentAt:string;senderDeviceId:string;sequence:string;chatId:string;deliveryStatus?:DeliveryStatus;editedAt?:string;
 };
 export type VisibleTextMessage=VisibleBase&{kind:'text';text:string};
 export type VisibleAttachmentMessage=VisibleBase&{
   kind:'attachment';attachmentId:string;attachmentKey:string;fileName:string;mimeType:string;
   size:number;mediaKind:'image'|'video'|'audio'|'file';localBlob?:Blob;
 };
-export type VisibleMessage=VisibleTextMessage|VisibleAttachmentMessage;
+export type VisibleDeletedMessage=VisibleBase&{kind:'deleted';deletedAt:string};
+export type VisibleMessage=VisibleTextMessage|VisibleAttachmentMessage|VisibleDeletedMessage;
+
+type DecryptedMutation={
+  kind:'mutation';mutationKind:'edit'|'delete';targetMessageId:string;text?:string;mutatedAt:string;sequence:string;
+};
+type DecryptedEvent={kind:'message';message:VisibleMessage}|DecryptedMutation;
 
 async function persist(items:StoredMessageEnvelope[]){
   const db=await getDb();const tx=db.transaction('messages','readwrite');
@@ -35,19 +41,65 @@ async function keyForEnvelope(chatId:string,pin:string,item:EncryptedMessageEnve
   }
 }
 
-async function visibleFromEnvelope(item:StoredMessageEnvelope|EncryptedMessageEnvelope,pin:string,status:DeliveryStatus='sent'):Promise<VisibleMessage>{
+async function decryptEvent(item:StoredMessageEnvelope|EncryptedMessageEnvelope,pin:string,status:DeliveryStatus='sent'):Promise<DecryptedEvent>{
   const key=await keyForEnvelope(item.chatId,pin,item);
   const payload=await decryptMessagePayload(item,key.key);
+  const sequence='sequence' in item?item.sequence:`local-${payload.sentAt}-${item.messageId}`;
+
+  if(item.mutation){
+    if(item.mutation.kind==='edit'&&payload.kind==='edit'){
+      return {kind:'mutation',mutationKind:'edit',targetMessageId:item.mutation.targetMessageId,text:payload.text,mutatedAt:payload.sentAt,sequence};
+    }
+    if(item.mutation.kind==='delete'&&payload.kind==='delete'){
+      return {kind:'mutation',mutationKind:'delete',targetMessageId:item.mutation.targetMessageId,mutatedAt:payload.sentAt,sequence};
+    }
+    throw new Error('invalid_message_mutation');
+  }
+
   const base={
     messageId:item.messageId,sentAt:payload.sentAt,senderDeviceId:item.senderDeviceId,
-    sequence:'sequence' in item?item.sequence:`local-${payload.sentAt}-${item.messageId}`,
-    chatId:item.chatId,deliveryStatus:status
+    sequence,chatId:item.chatId,deliveryStatus:status
   };
-  if(payload.kind==='text')return {...base,kind:'text',text:payload.text};
-  return {
+  if(payload.kind==='text')return {kind:'message',message:{...base,kind:'text',text:payload.text}};
+  if(payload.kind==='attachment')return {kind:'message',message:{
     ...base,kind:'attachment',attachmentId:payload.attachmentId,attachmentKey:payload.attachmentKey,
     fileName:payload.fileName,mimeType:payload.mimeType,size:payload.size,mediaKind:payload.mediaKind
-  };
+  }};
+  throw new Error('invalid_message_payload');
+}
+
+async function visibleFromEnvelope(item:StoredMessageEnvelope|EncryptedMessageEnvelope,pin:string,status:DeliveryStatus='sent'):Promise<VisibleMessage>{
+  const event=await decryptEvent(item,pin,status);
+  if(event.kind!=='message')throw new Error('invalid_message_payload');
+  return event.message;
+}
+
+async function applyStoredEvents(items:StoredMessageEnvelope[],pin:string){
+  const ordered=[...items].sort((a,b)=>{
+    const left=BigInt(a.sequence),right=BigInt(b.sequence);
+    return left<right?-1:left>right?1:0;
+  });
+  const byId=new Map<string,VisibleMessage>();
+  for(const item of ordered){
+    const event=await decryptEvent(item,pin,'sent');
+    if(event.kind==='message'){
+      byId.set(event.message.messageId,event.message);
+      continue;
+    }
+    const target=byId.get(event.targetMessageId);
+    if(!target)continue;
+    if(event.mutationKind==='edit'){
+      if(target.kind==='text'&&typeof event.text==='string'){
+        byId.set(target.messageId,{...target,text:event.text,editedAt:event.mutatedAt});
+      }
+      continue;
+    }
+    byId.set(target.messageId,{
+      messageId:target.messageId,chatId:target.chatId,senderDeviceId:target.senderDeviceId,
+      sequence:target.sequence,sentAt:target.sentAt,deliveryStatus:'sent',kind:'deleted',deletedAt:event.mutatedAt
+    });
+  }
+  return [...byId.values()];
 }
 
 function isNetworkError(error:unknown){
@@ -211,6 +263,42 @@ export async function sendAttachmentMessage(file:File,pin:string,chatId?:string)
   }
 }
 
+async function sendMutation(input:{chatId:string;targetMessageId:string;kind:'edit'|'delete';text?:string},pin:string){
+  const profile=await loadProfile();if(!profile||profile.status!=='active')throw new Error('active_profile_required');
+  const sentAt=new Date().toISOString();
+  const send=async()=>{
+    const current=await loadChatKey(input.chatId,pin);
+    const envelope=await encryptMessagePayload({
+      messageId:crypto.randomUUID(),chatId:input.chatId,senderDeviceId:profile.deviceId,
+      keyVersion:current.keyVersion,key:current.key,
+      payload:input.kind==='edit'
+        ?{kind:'edit',text:input.text??'',sentAt}
+        :{kind:'delete',sentAt},
+      mutation:{kind:input.kind,targetMessageId:input.targetMessageId}
+    });
+    const stored=await postEnvelope(envelope);
+    await persist([stored]);
+    return stored;
+  };
+  try{return await send();}
+  catch(error){
+    if(error instanceof Error&&error.message==='key_rotation_required'){
+      await rotateChatKey(input.chatId,pin);
+      return send();
+    }
+    throw error;
+  }
+}
+
+export async function editTextMessage(chatId:string,targetMessageId:string,text:string,pin:string){
+  const normalized=text.trim();if(!normalized)throw new Error('message_text_required');
+  return sendMutation({chatId,targetMessageId,kind:'edit',text:normalized},pin);
+}
+
+export async function deleteMessage(chatId:string,targetMessageId:string,pin:string){
+  return sendMutation({chatId,targetMessageId,kind:'delete'},pin);
+}
+
 export async function flushOutbox(pin:string,chatId?:string){
   const profile=await loadProfile();if(!profile||profile.status!=='active')return;
   const db=await getDb();
@@ -250,16 +338,13 @@ export async function reconcileChat(chatId:string,pin:string){
   const db=await getDb();const cursor=(await db.get('sync',chatId))?.cursor??'0';
   const result=await api<{items:StoredMessageEnvelope[];nextCursor:string}>(`/v1/chats/${chatId}/messages?after=${encodeURIComponent(cursor)}&limit=100`);
   await persist(result.items);await db.put('sync',{chatId,cursor:result.nextCursor});
-  const visible:VisibleMessage[]=[];
-  for(const item of result.items)visible.push(await visibleFromEnvelope(item,pin,'sent'));
-  return visible;
+  return readLocalVisibleMessages(chatId,pin);
 }
 
 export async function readLocalVisibleMessages(chatId:string,pin:string){
   const profile=await loadProfile();if(!profile)return[];
   const db=await getDb();const items=await db.getAllFromIndex('messages','chatId',chatId);
-  const out:VisibleMessage[]=[];
-  for(const item of items)out.push(await visibleFromEnvelope(item,pin,'sent'));
+  const out=await applyStoredEvents(items,pin);
   out.push(...await visibleOutbox(chatId,pin,profile.deviceId));
   out.sort((a,b)=>a.sentAt.localeCompare(b.sentAt)||a.messageId.localeCompare(b.messageId));
   return out;
