@@ -9,6 +9,13 @@ import {unlockDeviceProfile} from '../local/keystore.js';
 
 type SelectedMember={id:string;displayName:string};
 
+const COMPOSER_EMOJIS=[
+  '😀','😃','😄','😁','😊','🥰','😍','😘','😂','🤣',
+  '😉','😎','🤔','🙃','😴','😢','😭','😡','🤗','🥳',
+  '❤️','🩷','🧡','💛','💚','💙','💜','🤍','💯','✨',
+  '👍','👎','👏','🙏','💪','👌','🤝','👋','🔥','🎉'
+];
+
 function friendlyError(error:unknown){
   if(!(error instanceof Error))return 'Ошибка';
   if(error.message==='video_too_large')return 'Видео больше 20 МБ. Выберите более короткий ролик.';
@@ -40,6 +47,7 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
   const [uploading,setUploading]=useState(false);
   const [recording,setRecording]=useState(false);
   const [recordingSeconds,setRecordingSeconds]=useState(0);
+  const [emojiOpen,setEmojiOpen]=useState(false);
   const fileInput=useRef<HTMLInputElement>(null);
   const composerInput=useRef<HTMLTextAreaElement>(null);
   const recorderRef=useRef<MediaRecorder|null>(null);
@@ -52,7 +60,7 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
   useEffect(()=>{
     if(!profile||!readyPin){setActiveChatId('');return;}
     let cancelled=false;let stop=()=>{};
-    setActiveChatId('');setMessages([]);setEditingMessage(null);setReplyingTo(null);setSearchQuery('');setDraft('');setConnection('connecting');
+    setActiveChatId('');setMessages([]);setEditingMessage(null);setReplyingTo(null);setSearchQuery('');setDraft('');setEmojiOpen(false);setConnection('connecting');
     const activate=async()=>{
       try{
         const chatId=selectedMember?(await openDirectChat(selectedMember.id,readyPin)).chatId:profile.familyChatId;
@@ -133,7 +141,20 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
     window.requestAnimationFrame(()=>composerInput.current?.focus());
   }
 
-  function cancelEdit(){setEditingMessage(null);setDraft('');}
+  function cancelEdit(){setEditingMessage(null);setDraft('');setEmojiOpen(false);}
+
+  function insertEmoji(emoji:string){
+    const input=composerInput.current;
+    const start=input?.selectionStart??draft.length;
+    const end=input?.selectionEnd??start;
+    const next=draft.slice(0,start)+emoji+draft.slice(end);
+    const cursor=start+emoji.length;
+    setDraft(next);
+    window.requestAnimationFrame(()=>{
+      composerInput.current?.focus();
+      composerInput.current?.setSelectionRange(cursor,cursor);
+    });
+  }
 
   function previewFor(message:VisibleMessage){
     if(message.kind==='text')return message.text.slice(0,120);
@@ -266,8 +287,12 @@ export function FamilyChatScreen({selectedMember}:{selectedMember?:SelectedMembe
         <div><strong>Ответ</strong><span>{replyingTo.preview}</span></div>
         <button type="button" aria-label="Отменить ответ" onClick={()=>setReplyingTo(null)}>×</button>
       </div>}
+      {emojiOpen&&<div className="emoji-picker" role="group" aria-label="Эмодзи">
+        {COMPOSER_EMOJIS.map(emoji=><button type="button" key={emoji} aria-label={`Вставить ${emoji}`} onClick={()=>insertEmoji(emoji)}>{emoji}</button>)}
+      </div>}
       <input ref={fileInput} className="file-input" type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx" onChange={e=>void sendFile(e.target.files?.[0])}/>
       <button type="button" className="attach-button" aria-label="Добавить фото, видео или файл" disabled={!activeChatId||uploading||recording} onClick={()=>fileInput.current?.click()}>＋</button>
+      <button type="button" className={emojiOpen?'emoji-button active':'emoji-button'} aria-label={emojiOpen?'Закрыть эмодзи':'Открыть эмодзи'} aria-expanded={emojiOpen} disabled={!activeChatId||recording||messageActionBusy} onClick={()=>setEmojiOpen(value=>!value)}>😊</button>
       {recording
         ?<button type="button" className="voice-button recording" aria-label="Остановить и отправить голосовое" onClick={()=>stopRecording(true)}>■</button>
         :<button type="button" className="voice-button" aria-label="Записать голосовое" disabled={!activeChatId||uploading} onClick={()=>void startRecording()}>●</button>}

@@ -4,7 +4,7 @@ const Config = z.object({
   PORT:z.coerce.number().int().min(1).max(65535).default(8787),
   DATABASE_URL:z.string().min(1).default('postgres://family:family-dev-only@localhost:5432/family'),
   NODE_ENV:z.enum(['development','test','production']).default('development'),
-  APP_VERSION:z.string().min(1).default('0.5.0'),
+  APP_VERSION:z.string().min(1).default('0.5.1'),
   OPENROUTER_API_KEY:z.string().min(1).optional(),
   OPENROUTER_BASE_URL:z.string().url().default('https://openrouter.ai'),
   OPENROUTER_MODEL:z.string().min(1).default('openrouter/free')
