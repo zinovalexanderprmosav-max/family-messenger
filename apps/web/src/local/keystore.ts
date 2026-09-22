@@ -1,10 +1,37 @@
-import { decryptKeystore, encryptKeystore, fromBase64, toBase64, type DeviceIdentity, type PlainKeystore } from '@family-messenger/crypto';
+import { decryptKeystore, encryptKeystore, fromBase64, toBase64, type DeviceIdentity, type EncryptedKeystoreBlob, type PlainKeystore } from '@family-messenger/crypto';
 import { getDb } from './db.js';
+import { loadKeystoreShadow, saveKeystoreShadow } from './shadow.js';
 
 export function identityToPlain(identity:DeviceIdentity):PlainKeystore{return {encryptionPublicKey:toBase64(identity.encryptionPublicKey),encryptionPrivateKey:toBase64(identity.encryptionPrivateKey),signingPublicKey:toBase64(identity.signingPublicKey),signingPrivateKey:toBase64(identity.signingPrivateKey),chatKeys:{}};}
-export async function savePlainKeystore(plain:PlainKeystore,pin:string){const blob=await encryptKeystore(plain,pin);const db=await getDb();await db.put('keystore',{id:'device',blob});}
+
+export async function savePlainKeystore(plain:PlainKeystore,pin:string){
+  const blob=await encryptKeystore(plain,pin);
+  const db=await getDb();
+  await db.put('keystore',{id:'device',blob});
+  saveKeystoreShadow(blob);
+}
+
 export async function createLockedDeviceProfile(identity:DeviceIdentity,pin:string){await savePlainKeystore(identityToPlain(identity),pin);}
-export async function unlockDeviceProfile(pin:string){const db=await getDb();const row=await db.get('keystore','device');if(!row)throw new Error('keystore_not_found');return decryptKeystore(row.blob,pin);}
+
+async function loadEncryptedKeystore(){
+  const db=await getDb();
+  const row=await db.get('keystore','device');
+  if(row){
+    saveKeystoreShadow(row.blob);
+    return row.blob;
+  }
+  const shadow=loadKeystoreShadow<EncryptedKeystoreBlob>();
+  if(!shadow)return null;
+  await db.put('keystore',{id:'device',blob:shadow});
+  return shadow;
+}
+
+export async function unlockDeviceProfile(pin:string){
+  const blob=await loadEncryptedKeystore();
+  if(!blob)throw new Error('keystore_not_found');
+  return decryptKeystore(blob,pin);
+}
+
 export async function saveChatKey(chatId:string,keyVersion:number,key:Uint8Array,pin:string){
  const plain=await unlockDeviceProfile(pin),encoded=toBase64(key),current=plain.chatKeys[chatId];
  if(!current){plain.chatKeys[chatId]={keyVersion,key:encoded};}

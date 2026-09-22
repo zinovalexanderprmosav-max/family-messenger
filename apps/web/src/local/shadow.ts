@@ -1,0 +1,35 @@
+const PROFILE_KEY='family-messenger:profile-shadow:v1';
+const KEYSTORE_KEY='family-messenger:keystore-shadow:v1';
+
+function storage(){
+  try{
+    if(typeof localStorage==='undefined')return null;
+    return localStorage;
+  }catch{return null;}
+}
+
+export function saveProfileShadow(value:unknown){
+  try{storage()?.setItem(PROFILE_KEY,JSON.stringify(value));}catch{}
+}
+export function loadProfileShadow<T>():T|null{
+  try{
+    const raw=storage()?.getItem(PROFILE_KEY);
+    return raw?JSON.parse(raw) as T:null;
+  }catch{return null;}
+}
+export function saveKeystoreShadow(value:unknown){
+  try{storage()?.setItem(KEYSTORE_KEY,JSON.stringify(value));}catch{}
+}
+export function loadKeystoreShadow<T>():T|null{
+  try{
+    const raw=storage()?.getItem(KEYSTORE_KEY);
+    return raw?JSON.parse(raw) as T:null;
+  }catch{return null;}
+}
+export function clearLocalShadows(){
+  try{
+    const target=storage();
+    target?.removeItem(PROFILE_KEY);
+    target?.removeItem(KEYSTORE_KEY);
+  }catch{}
+}

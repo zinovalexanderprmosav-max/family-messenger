@@ -98,3 +98,19 @@ h3{font-size:1rem;margin-top:24px}
 .empty-chat{margin:auto;display:grid;place-items:center;text-align:center;gap:9px;color:var(--muted);max-width:320px;padding:28px}.empty-chat strong{color:var(--text);font-size:1rem}.empty-chat span{font-size:.86rem;line-height:1.5}
 .recording-banner{display:flex;align-items:center;justify-content:center;gap:8px;padding:7px 12px;color:var(--danger);font-size:.82rem;font-weight:800;background:var(--danger-soft)}.record-dot{width:9px;height:9px;border-radius:50%;background:var(--danger);animation:pulse 1.2s infinite}
 .message-status.status-queued,.message-status.status-sending{color:var(--muted)}.message-status.status-sent{color:var(--accent)}.message-status.status-failed{color:var(--danger)}
+
+.chat-image-button{display:block;padding:0;border:0;background:transparent;border-radius:16px;overflow:hidden;max-width:100%;cursor:zoom-in}
+.chat-image-button:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:2px}
+.attachment-error{font-size:.78rem;margin-top:4px}
+.photo-viewer{position:fixed;inset:0;z-index:1000;background:rgba(5,10,9,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:70px 14px 18px;backdrop-filter:blur(10px)}
+.photo-viewer-toolbar{position:absolute;top:0;left:0;right:0;min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px max(14px,env(safe-area-inset-left));background:rgba(12,18,16,.88);color:#fff;border-bottom:1px solid rgba(255,255,255,.12)}
+.photo-viewer-toolbar strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.9rem}
+.photo-viewer-toolbar>div{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.photo-viewer-open{color:#d8fff4;text-decoration:none;font-size:.8rem;font-weight:800;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.08)}
+.photo-viewer-close{width:40px;height:40px;border-radius:50%;padding:0;background:rgba(255,255,255,.12);color:#fff;font-size:28px;line-height:1}
+.photo-viewer-image{max-width:100%;max-height:calc(100dvh - 100px);object-fit:contain;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.35);touch-action:pinch-zoom}
+@media(max-width:520px){
+  .photo-viewer{padding-top:72px}
+  .photo-viewer-toolbar{padding-top:max(8px,env(safe-area-inset-top));min-height:64px}
+  .photo-viewer-open{font-size:.72rem}
+}

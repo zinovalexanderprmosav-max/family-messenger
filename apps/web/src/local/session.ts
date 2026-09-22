@@ -1,4 +1,5 @@
 import { getDb, type LocalProfile } from './db.js';
+import { loadProfileShadow, saveProfileShadow } from './shadow.js';
 
 declare global {
   interface Window {
@@ -27,5 +28,22 @@ export function getNativeDeviceName(){
   }catch{return undefined;}
 }
 export function isNativeAndroid(){return Boolean(window.FamilyMessengerNative?.getAutoPin);}
-export async function saveProfile(profile:LocalProfile){const db=await getDb();await db.put('profile',{id:'current',profile});}
-export async function loadProfile(){const db=await getDb();return (await db.get('profile','current'))?.profile??null;}
+
+export async function saveProfile(profile:LocalProfile){
+  const db=await getDb();
+  await db.put('profile',{id:'current',profile});
+  saveProfileShadow(profile);
+}
+
+export async function loadProfile(){
+  const db=await getDb();
+  const current=(await db.get('profile','current'))?.profile;
+  if(current){
+    saveProfileShadow(current);
+    return current;
+  }
+  const shadow=loadProfileShadow<LocalProfile>();
+  if(!shadow)return null;
+  await db.put('profile',{id:'current',profile:shadow});
+  return shadow;
+}

@@ -17,22 +17,67 @@ async function canvasBlob(canvas:HTMLCanvasElement,type:string,quality:number){
   return new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,type,quality));
 }
 
-export async function compressImageIfNeeded(file:File):Promise<File>{
-  if(!file.type.startsWith('image/')||file.size<=IMAGE_COMPRESS_THRESHOLD||typeof createImageBitmap!=='function')return file;
+async function decodeImage(file:File):Promise<{source:CanvasImageSource;width:number;height:number;close:()=>void}|null>{
+  if(typeof createImageBitmap==='function'){
+    try{
+      const bitmap=await createImageBitmap(file);
+      return {source:bitmap,width:bitmap.width,height:bitmap.height,close:()=>bitmap.close()};
+    }catch{}
+  }
+
+  if(typeof document==='undefined'||typeof Image==='undefined'||typeof URL==='undefined')return null;
+  const url=URL.createObjectURL(file);
   try{
-    const bitmap=await createImageBitmap(file);
-    const scale=Math.min(1,IMAGE_MAX_EDGE/Math.max(bitmap.width,bitmap.height));
-    const width=Math.max(1,Math.round(bitmap.width*scale)),height=Math.max(1,Math.round(bitmap.height*scale));
-    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
-    const ctx=canvas.getContext('2d');if(!ctx){bitmap.close();return file;}
-    ctx.drawImage(bitmap,0,0,width,height);bitmap.close();
-    const outputType=file.type==='image/webp'?'image/webp':'image/jpeg';
-    const blob=await canvasBlob(canvas,outputType,.82);
-    if(!blob||blob.size>=file.size)return file;
-    const base=file.name.replace(/\.[^.]+$/,'');
-    const ext=outputType==='image/webp'?'.webp':'.jpg';
-    return new File([blob],base+ext,{type:outputType,lastModified:Date.now()});
-  }catch{return file;}
+    const image=new Image();
+    image.decoding='async';
+    await new Promise<void>((resolve,reject)=>{
+      image.onload=()=>resolve();
+      image.onerror=()=>reject(new Error('image_decode_failed'));
+      image.src=url;
+    });
+    const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;
+    if(!width||!height)return null;
+    return {source:image,width,height,close:()=>URL.revokeObjectURL(url)};
+  }catch{
+    URL.revokeObjectURL(url);
+    return null;
+  }
+}
+
+function shouldNormalizeImage(file:File){
+  const type=file.type.toLowerCase();
+  const name=file.name.toLowerCase();
+  return file.size>IMAGE_COMPRESS_THRESHOLD
+    ||type==='image/heic'||type==='image/heif'
+    ||name.endsWith('.heic')||name.endsWith('.heif');
+}
+
+export async function compressImageIfNeeded(file:File):Promise<File>{
+  if(!file.type.startsWith('image/')&&!/\.(heic|heif)$/i.test(file.name))return file;
+  if(!shouldNormalizeImage(file))return file;
+
+  const decoded=await decodeImage(file);
+  if(!decoded)return file;
+
+  try{
+    const scale=Math.min(1,IMAGE_MAX_EDGE/Math.max(decoded.width,decoded.height));
+    const width=Math.max(1,Math.round(decoded.width*scale));
+    const height=Math.max(1,Math.round(decoded.height*scale));
+    const canvas=document.createElement('canvas');
+    canvas.width=width;canvas.height=height;
+    const ctx=canvas.getContext('2d');
+    if(!ctx)return file;
+    ctx.drawImage(decoded.source,0,0,width,height);
+    const blob=await canvasBlob(canvas,'image/jpeg',.84);
+    if(!blob)return file;
+
+    const base=file.name.replace(/\.[^.]+$/,'')||'photo';
+    const normalized=new File([blob],base+'.jpg',{type:'image/jpeg',lastModified:Date.now()});
+    if(file.type==='image/heic'||file.type==='image/heif'||/\.(heic|heif)$/i.test(file.name))return normalized;
+    return normalized.size<file.size?normalized:file;
+  }finally{
+    decoded.close();
+  }
 }
 
 export async function prepareAttachmentFile(file:File){
@@ -56,7 +101,7 @@ export async function uploadEncryptedAttachment(file:File,chatId:string){
     fileName:prepared.name||'file',
     mimeType:prepared.type||'application/octet-stream',
     size:prepared.size,
-    mediaKind:mediaKind(prepared.type)
+    mediaKind:mediaKind(prepared.type||file.type)
   } satisfies Omit<AttachmentMessagePayload,'kind'|'sentAt'>;
 }
 
@@ -69,6 +114,7 @@ export async function fetchAttachmentBlob(input:{
     attachmentId:input.attachmentId,chatId:input.chatId,nonce:stored.nonce,ciphertext:stored.ciphertext,
     key:fromBase64(input.attachmentKey)
   });
-  const buffer=new ArrayBuffer(bytes.byteLength);new Uint8Array(buffer).set(bytes);
+  const buffer=new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
   return new Blob([buffer],{type:input.mimeType||'application/octet-stream'});
 }
