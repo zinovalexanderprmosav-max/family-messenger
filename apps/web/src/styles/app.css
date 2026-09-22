@@ -236,3 +236,29 @@ h3{font-size:1rem;margin-top:24px}
 .assistant-thread{overflow:auto;padding:20px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface-soft) 45%,transparent),transparent)}.assistant-empty{margin:auto;text-align:center;max-width:600px;display:grid;justify-items:center;gap:10px}.assistant-empty p{color:var(--muted);margin:0}.assistant-quick-prompts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%;margin-top:10px}.assistant-quick-prompts button{text-align:left;background:var(--surface-strong);border:1px solid var(--line);color:var(--text)}
 .assistant-message{max-width:min(78%,680px);padding:11px 14px;border-radius:20px;background:var(--surface-soft);border:1px solid var(--line);white-space:pre-wrap;line-height:1.5}.assistant-message.user{align-self:flex-end;background:var(--accent-soft);border-radius:20px 20px 7px 20px}.assistant-message.assistant{align-self:flex-start;border-radius:20px 20px 20px 7px}.assistant-message small{display:block;margin-top:7px;color:var(--muted);font-size:.65rem}.assistant-thinking{letter-spacing:3px;color:var(--accent)}
 .assistant-error{padding:9px 16px;color:var(--danger);background:var(--danger-soft);font-size:.78rem}.assistant-composer{display:flex;gap:9px;align-items:flex-end;padding:12px 14px;border-top:1px solid var(--line);background:var(--surface-strong)}.assistant-composer textarea{flex:1;resize:none;min-height:48px;max-height:120px;border:1px solid var(--line);border-radius:18px;padding:13px 14px;background:var(--surface-soft);outline:0}
+
+@media(max-width:850px){
+  .assistant-screen{
+    height:calc(100dvh - 138px);
+    border-radius:0;
+    border:0;
+    border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    box-shadow:none;
+  }
+  .assistant-thread{padding:16px 14px}
+  .assistant-header{padding:14px 16px;align-items:center}
+  .assistant-title p{display:none}
+  .assistant-provider{min-width:125px}
+  .assistant-quick-prompts{grid-template-columns:1fr}
+  .assistant-message{max-width:86%}
+  .assistant-composer{padding:10px}
+}
+@supports (padding: env(safe-area-inset-top)){
+  @media(max-width:850px){
+    .assistant-screen{
+      height:calc(100dvh - 138px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+      min-height:0;
+    }
+  }
+}
