@@ -2,7 +2,7 @@
 import 'fake-indexeddb/auto';
 import {afterEach,describe,expect,it} from 'vitest';
 import {encryptMessagePayload,generateDeviceIdentity} from '@family-messenger/crypto';
-import type {StoredMessageEnvelope} from '@family-messenger/protocol';
+import type {EncryptedMessageEnvelope,StoredMessageEnvelope} from '@family-messenger/protocol';
 import {clearLocalData,getDb,resetDbHandleForTests} from '../src/local/db.js';
 import {createLockedDeviceProfile,saveChatKey} from '../src/local/keystore.js';
 import {saveProfile} from '../src/local/session.js';
@@ -32,7 +32,7 @@ async function setup(){
   return key;
 }
 
-function stored<T extends {sequence?:never;acceptedAt?:never}>(envelope:T,sequence:string):T&{sequence:string;acceptedAt:string}{
+function stored(envelope:EncryptedMessageEnvelope,sequence:string):StoredMessageEnvelope{
   return {...envelope,sequence,acceptedAt:`2026-09-22T12:00:0${sequence}.000Z`};
 }
 
@@ -42,12 +42,12 @@ describe('message edit/delete history',()=>{
     const original=stored(await encryptMessagePayload({
       messageId:originalId,chatId,senderDeviceId:deviceId,keyVersion:1,key,
       payload:{kind:'text',text:'Первый текст',sentAt:'2026-09-22T12:00:00.000Z'}
-    }),'1') as StoredMessageEnvelope;
+    }),'1');
     const edit=stored(await encryptMessagePayload({
       messageId:editId,chatId,senderDeviceId:deviceId,keyVersion:1,key,
       payload:{kind:'edit',text:'Исправленный текст',sentAt:'2026-09-22T12:01:00.000Z'},
       mutation:{kind:'edit',targetMessageId:originalId}
-    }),'2') as StoredMessageEnvelope;
+    }),'2');
 
     const db=await getDb();
     await db.put('messages',original);await db.put('messages',edit);
@@ -60,7 +60,7 @@ describe('message edit/delete history',()=>{
       messageId:deleteId,chatId,senderDeviceId:deviceId,keyVersion:1,key,
       payload:{kind:'delete',sentAt:'2026-09-22T12:02:00.000Z'},
       mutation:{kind:'delete',targetMessageId:originalId}
-    }),'3') as StoredMessageEnvelope;
+    }),'3');
     await db.put('messages',deletion);
 
     const deleted=await readLocalVisibleMessages(chatId,pin);
