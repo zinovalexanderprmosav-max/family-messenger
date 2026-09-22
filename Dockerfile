@@ -22,7 +22,7 @@ WORKDIR /app
 COPY --from=build /app /app
 COPY Render.Caddyfile /etc/caddy/Caddyfile
 ENV NODE_ENV=production
-ENV APP_VERSION=0.4.0-final
+ENV APP_VERSION=0.4.1
 ENV HOST=0.0.0.0
 EXPOSE 10000
 CMD ["sh","-c","PORT=8787 npm run start -w apps/server & exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"]
