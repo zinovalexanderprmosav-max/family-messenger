@@ -10,7 +10,6 @@ const pool=new Pool({connectionString:databaseUrl});
 let app:FastifyInstance;
 
 beforeAll(async()=>{
-  delete process.env.OLLAMA_BASE_URL;
   delete process.env.OPENROUTER_API_KEY;
   app=await buildApp({pool});
 });
@@ -29,7 +28,6 @@ describe('assistant API',()=>{
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       providers:{
-        ollama:{configured:false,model:'qwen3:4b'},
         openrouter:{configured:false,model:'openrouter/free'}
       }
     });
@@ -41,9 +39,9 @@ describe('assistant API',()=>{
     const response=await app.inject({
       method:'POST',url:'/v1/assistant/chat',
       headers:{cookie:`fm_session=${actors.primary.token}`,'x-csrf-token':actors.primary.csrf},
-      payload:{provider:'auto',messages:[{role:'user',content:'Привет'}]}
+      payload:{messages:[{role:'user',content:'Привет'}]}
     });
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({error:'assistant_not_configured'});
+    expect(response.json()).toEqual({error:'openrouter_not_configured'});
   });
 });
