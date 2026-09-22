@@ -12,7 +12,7 @@ export type OutboxAttachmentRef={
   attachmentId:string;attachmentKey:string;fileName:string;mimeType:string;size:number;mediaKind:'image'|'video'|'audio'|'file';
 };
 export type OutboxAttachmentItem={
-  messageId:string;chatId:string;kind:'attachment';blob:Blob;fileName:string;mimeType:string;sentAt:string;
+  messageId:string;chatId:string;kind:'attachment';bytes:ArrayBuffer;fileName:string;mimeType:string;sentAt:string;
   status:OutboxStatus;attempts:number;lastError?:string;attachment?:OutboxAttachmentRef;envelope?:EncryptedMessageEnvelope;
 };
 export type OutboxItem=OutboxTextItem|OutboxAttachmentItem;
