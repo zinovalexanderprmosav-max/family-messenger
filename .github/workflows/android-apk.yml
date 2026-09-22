@@ -1,9 +1,9 @@
-name: Family Messenger 0.4.2 Android APK
+name: Family Messenger 0.5.0 Android APK
 
 on:
   push:
     branches:
-      - release/0.4.2-message-controls
+      - feat/0.5.0-family-assistant
   pull_request:
     branches:
       - main
@@ -25,9 +25,9 @@ jobs:
       - name: Prepare artifact
         run: |
           mkdir -p artifacts
-          cp apps/android-shell/app/build/outputs/apk/debug/app-debug.apk artifacts/FamilyMessenger-0.4.2.apk
+          cp apps/android-shell/app/build/outputs/apk/debug/app-debug.apk artifacts/FamilyMessenger-0.5.0.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: FamilyMessenger-0.4.2-apk
-          path: artifacts/FamilyMessenger-0.4.2.apk
+          name: FamilyMessenger-0.5.0-apk
+          path: artifacts/FamilyMessenger-0.5.0.apk
           if-no-files-found: error
